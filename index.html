@@ -98,8 +98,8 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 // Any newer input bumps seq so a slower, older response can never overwrite it.
 // Drive times come from Mapbox's traffic-aware routing for the coming Saturday: leaving home
 // at 5:45 PM, and leaving the arena at 10:30 PM. Mapbox public token; restrict it to this
-// site's URL in the Mapbox account so others can't use it elsewhere.
-var MAPBOX="pk.eyJ1IjoicmFmaWxheiIsImEiOiJjbXc4bDUyMHUwdXdkMnhveXVmbjF5M3YxIn0.jULjm7WpVSmk0SKtYFYRDA";
+// site's URL in the Mapbox account. referrerPolicy sends the full page URL, which the restriction checks.
+var MAPBOX="pk.eyJ1IjoicmFmaWxheiIsImEiOiJjbXc4bGh3MzEwMHUxMnlwdTZjaHFzbGN5In0._qqGrtxqXURtbHXisKe8gg";
 var ARENA="-118.2673,34.0430",LEAVE="17:45",LEAVE_HOME="22:30";
 // Fallback if Mapbox fails: OSRM's no-traffic time times these rough multipliers.
 var ARRIVE=1.25,RETURN=1.05;
@@ -111,7 +111,7 @@ function nextSat(){ // next Saturday whose 5:45 PM departure hasn't passed yet
 }
 function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function mbRoute(a,b,t,sig){
- return fetch("https://api.mapbox.com/directions/v5/mapbox/driving-traffic/"+a+";"+b+"?overview=false&depart_at="+t+"&access_token="+MAPBOX,{signal:sig})
+ return fetch("https://api.mapbox.com/directions/v5/mapbox/driving-traffic/"+a+";"+b+"?overview=false&depart_at="+t+"&access_token="+MAPBOX,{signal:sig,referrerPolicy:"no-referrer-when-downgrade"})
  .then(function(r){return r.json()}).then(function(d){if(!d.routes||!d.routes.length)throw new Error("mapbox");return d.routes[0]});
 }
 var tmr,ctl,seq=0;
