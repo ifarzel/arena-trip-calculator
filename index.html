@@ -16,12 +16,17 @@ h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.05rem;margin:0 0 12px}
 .sub{color:var(--mut);margin:0 0 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.grid>div{display:flex;flex-direction:column;justify-content:flex-end} /* keep inputs aligned when a label wraps */
+.grid>div[hidden]{display:none}
 label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:3px}
 input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 .addr{margin-bottom:12px}.addrrow{display:flex;gap:8px}
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 #zhint{white-space:pre-line}
 .evt{margin-bottom:6px}
+.asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
+.asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
+.asec .hint{margin-bottom:0}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
 /* ---------- results ---------- */
 .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
@@ -98,35 +103,47 @@ td.best .tot,td.best .per{color:var(--good)}
 
 <div class="card">
 <h2>Assumptions</h2>
-<div class="grid">
-<div><label>Vehicle type</label><select id="pt"><option value="gas">Gas / hybrid</option><option value="ev">Electric</option></select></div>
-<div id="gasA"><label>MPG</label><input id="mpg" type="number" value="28" min="1"></div>
-<div id="gasB"><label>Gas ($/gal)</label><input id="gas" type="number" value="6" step="0.05"></div>
-<div id="evA" hidden><label>Charging</label><select id="chg"><option value="0.26">Home ($0.26/kWh)</option><option value="0.48">Public fast/L2 ($0.48)</option><option value="0.32">Workplace ($0.32)</option></select></div>
-<div id="evB" hidden><label>kWh per mile</label><input id="kwh" type="number" value="0.30" step="0.01"></div>
-<div><label>Arena parking ($)</label><input id="park" type="number" value="40"></div>
-<div><label>Rideshare fare, inbound ($)</label><input id="fare" type="number" step="0.5" placeholder="auto"></div>
-<div><label>Post-event surge (×)</label><input id="surge" type="number" value="1.35" step="0.05"></div>
-<div><label>Tip (%)</label><input id="tip" type="number" value="10"></div>
-<div><label>Transit fare, round trip per person ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
-<div><label>Station parking ($, 0 if none)</label><input id="spark" type="number" value="3" step="0.5"></div>
-</div>
-<p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min, priced separately for each direction using that direction’s drive time; the post-event surge applies to the ride home. A fare entered by hand is used for both directions. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
-</div>
+<p class="hint" style="margin:-6px 0 0">Defaults are typical for an arena event; change any of them to match how you travel.</p>
 
-<div class="card">
-<h2>Time at the arena (min)</h2>
+<section class="asec" style="--m:var(--car)">
+<h3>🚗 Personal car</h3>
 <div class="grid">
-<div><label>Car: find &amp; enter parking</label><input id="tpark" type="number" value="15" min="0"></div>
-<div><label>Car: walk lot ↔ arena, each way</label><input id="twalk" type="number" value="8" min="0"></div>
-<div><label>Car: exit lot after event</label><input id="texit" type="number" value="15" min="0"></div>
-<div><label>Rideshare: wait for ride there</label><input id="rwait1" type="number" value="8" min="0"></div>
-<div><label>Rideshare: wait for pickup after</label><input id="rwait2" type="number" value="20" min="0"></div>
-<div><label>Rideshare: walk zone ↔ arena, each way</label><input id="rwalk" type="number" value="5" min="0"></div>
-<div><label>Transit: buffer at first stop (there)</label><input id="tbuf" type="number" value="5" min="0"></div>
-<div><label>Transit: post-event crowd delay (home)</label><input id="tcrowd" type="number" value="10" min="0"></div>
+<div><label for="pt">Vehicle type</label><select id="pt"><option value="gas">Gas / hybrid</option><option value="ev">Electric</option></select></div>
+<div id="gasA"><label for="mpg">MPG</label><input id="mpg" type="number" value="28" min="1"></div>
+<div id="gasB"><label for="gas">Gas ($/gal)</label><input id="gas" type="number" value="6" step="0.05"></div>
+<div id="evA" hidden><label for="chg">Charging</label><select id="chg"><option value="0.26">Home ($0.26/kWh)</option><option value="0.48">Public fast/L2 ($0.48)</option><option value="0.32">Workplace ($0.32)</option></select></div>
+<div id="evB" hidden><label for="kwh">kWh per mile</label><input id="kwh" type="number" value="0.30" step="0.01"></div>
+<div><label for="park">Arena parking ($)</label><input id="park" type="number" value="40"></div>
+<div><label for="tpark">Find &amp; enter parking (min)</label><input id="tpark" type="number" value="15" min="0"></div>
+<div><label for="twalk">Walk lot ↔ arena, each way (min)</label><input id="twalk" type="number" value="8" min="0"></div>
+<div><label for="texit">Exit lot after event (min)</label><input id="texit" type="number" value="15" min="0"></div>
 </div>
-<p class="hint">Rideshare drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south), not the front door. Check your ticket on the night, as zones can change by event.</p>
+<p class="hint">Costs are per car and split between riders.</p>
+</section>
+
+<section class="asec" style="--m:var(--ride)">
+<h3>🚕 Rideshare</h3>
+<div class="grid">
+<div><label for="fare">Fare each way ($)</label><input id="fare" type="number" step="0.5" placeholder="auto"></div>
+<div><label for="surge">Post-event surge (×)</label><input id="surge" type="number" value="1.35" step="0.05"></div>
+<div><label for="tip">Tip (%)</label><input id="tip" type="number" value="10"></div>
+<div><label for="rwait1">Wait for ride there (min)</label><input id="rwait1" type="number" value="8" min="0"></div>
+<div><label for="rwait2">Wait for pickup after (min)</label><input id="rwait2" type="number" value="20" min="0"></div>
+<div><label for="rwalk">Walk zone ↔ arena, each way (min)</label><input id="rwalk" type="number" value="5" min="0"></div>
+</div>
+<p class="hint">Fare left on “auto” = $3.00 + $1.85/mile + $0.40/min, priced for each direction from its drive time; a fare you enter is used both ways. The surge applies to the ride home. Costs are per ride and split between riders. Drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south); check your ticket, as zones can change by event.</p>
+</section>
+
+<section class="asec" style="--m:var(--tr)">
+<h3>🚆 Public transit</h3>
+<div class="grid">
+<div><label for="tfare">Fare, round trip per person ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
+<div><label for="spark">Station parking ($)</label><input id="spark" type="number" value="0" step="0.5"></div>
+<div><label for="tbuf">Buffer at first stop, there (min)</label><input id="tbuf" type="number" value="5" min="0"></div>
+<div><label for="tcrowd">Post-event crowd delay, home (min)</label><input id="tcrowd" type="number" value="10" min="0"></div>
+</div>
+<p class="hint">The fare is filled in from Google when it has one. Add station parking if you drive to a park-and-ride; it’s shared by the group.</p>
+</section>
 </div>
 
 <div id="out"></div>
@@ -333,8 +350,8 @@ function live(q){
    var fa=t.fareThere,fb=t.fareBack,guess=fa==null||fb==null;
    if(fa==null)fa=fb;if(fb==null)fb=fa;
    $("tfare").value=(fa+fb).toFixed(2);
-   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Set under Assumptions.");
-  }else if(t)L.push("Google had no fare for this trip, so the transit fare under Assumptions is an estimate.");
+   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Assumptions → Public transit.");
+  }else if(t)L.push("Google had no fare for this trip, so the transit fare under Assumptions → Public transit is an estimate.");
   L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
   $("zhint").textContent=L.join("\n");
   calc();
@@ -420,7 +437,7 @@ function calc(){
    '<div class="mfoot grp">'+[1,2].map(function(i){var b=x===cheap[i];
     return '<div'+(b?' class="best"':'')+'><span>'+N[i]+' riders</span><span>'+money(m[i][x])+' total · <b>'+money(pp(x,i))+'</b> each</span></div>'}).join("")+'</div></div>';
  });
- h+='</div><p class="hint" style="margin:-8px 0 16px">Car and rideshare costs are per vehicle and split between riders; transit fares are per rider, with one shared station parking fee. Green = cheapest per person for that group size.</p>';
+ h+='</div><p class="hint" style="margin:-8px 0 16px">Car and rideshare costs are per vehicle and split between riders; transit fares are per rider, with any station parking shared. Green = cheapest per person for that group size.</p>';
 
  // insights
  var I=[],r0=m[0];
@@ -440,7 +457,7 @@ function calc(){
   (order[0]!=="car"?'Driving loses '+mins(f.car[1]+f.car[2])+' to parking, exiting and walking.':'Parking and walking still cost '+mins(f.car[1]+f.car[2])+' of that trip.'));
  var late=trip&&trip.late?'<li class="warn"><b>⚠️ Late-night transit gap:</b> after the event the next transit trip home leaves at <b>'+trip.late.first+'</b>, arriving around '+trip.late.home+'. Plan on a ride home if you take transit there.</li>':'';
  h+='<div class="card"><h2>💡 Trade-offs &amp; break-even</h2><ul class="ins">'+late+I.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>';
- h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
+ h+='<p class="hint">Assumptions (edit them above): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
  $("edit").onclick=function(){window.scrollTo({top:0,behavior:"smooth"});$("addr").focus({preventScroll:true})};
 }
