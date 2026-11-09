@@ -20,6 +20,7 @@ label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:3px}
 input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 .addr{margin-bottom:12px}.addrrow{display:flex;gap:8px}
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+#zhint{white-space:pre-line}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .badge{background:var(--acc);color:#fff;border-radius:999px;padding:4px 12px;font-size:.82rem;font-weight:600}
@@ -51,7 +52,8 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
 <div><label>Drive there, leave 5:45 PM (min)</label><input id="drive" type="number" min="0"></div>
 <div><label>Drive home, leave 10:30 PM (min)</label><input id="dret" type="number" min="0"></div>
-<div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div></div>
+<div><label>Transit there, arrive 6:45 PM (min)</label><input id="trmin" type="number" min="0"></div>
+<div><label>Transit home, leave 10:30 PM (min)</label><input id="trret" type="number" min="0"></div></div>
 <p class="hint" id="zhint"></p>
 </div>
 
@@ -99,39 +101,108 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 
 // Live address lookups: tmr = pending timer, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
-// Drive times come from Mapbox's traffic-aware routing for the coming Saturday: leaving home
-// at 5:45 PM, and leaving the arena at 10:30 PM. Mapbox public token; restrict it to this
-// site's URL in the Mapbox account. referrerPolicy sends the full page URL, which the restriction checks.
-var MAPBOX="pk.eyJ1IjoicmFmaWxheiIsImEiOiJjbXc4bGh3MzEwMHUxMnlwdTZjaHFzbGN5In0._qqGrtxqXURtbHXisKe8gg";
-var ARENA="-118.2673,34.0430",LEAVE="17:45",LEAVE_HOME="22:30";
-// Fallback if Mapbox fails: OSRM's no-traffic time times these rough multipliers.
+// Google Maps Platform does the geocoding (Maps JavaScript API) and all four routes (Routes API) for the
+// coming Saturday: driving with typical traffic leaving home 5:45 PM and leaving the arena 10:30 PM,
+// and transit arriving by 6:45 PM and leaving the arena at 10:30 PM. The key is restricted in Google
+// Cloud to this site's URLs and these two APIs; referrerPolicy sends the full page URL it checks.
+var GKEY="AIzaSyC6YF3owaP0CiuOfgjDsGA5igkAUOb2HFU";
+var ARENA=[-118.2673,34.0430],SOCAL=[-121.0,32.5,-114.0,35.8];
+// Fallbacks if Google fails: OSRM no-traffic time times rough multipliers; transit from drive time.
 var ARRIVE=1.25,RETURN=1.05;
-function pad(n){return (n<10?"0":"")+n}
+var RP="no-referrer-when-downgrade";
 function nextSat(){ // next Saturday whose 5:45 PM departure hasn't passed yet
  var d=new Date(),add=(6-d.getDay()+7)%7;
  if(add===0&&d.getHours()*60+d.getMinutes()>=17*60+45)add=7;
  d.setDate(d.getDate()+add);return d;
 }
-function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
-function mbRoute(a,b,t,sig){
- return fetch("https://api.mapbox.com/directions/v5/mapbox/driving-traffic/"+a+";"+b+"?overview=false&depart_at="+t+"&access_token="+MAPBOX,{signal:sig,referrerPolicy:"no-referrer-when-downgrade"})
- .then(function(r){return r.json()}).then(function(d){if(!d.routes||!d.routes.length)throw new Error("mapbox");return d.routes[0]});
+function laDate(day,hh,mm){ // the instant it is hh:mm in Los Angeles on day's calendar date
+ var guess=Date.UTC(day.getFullYear(),day.getMonth(),day.getDate(),hh,mm),g={};
+ new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})
+ .formatToParts(new Date(guess)).forEach(function(x){g[x.type]=+x.value});
+ return new Date(2*guess-Date.UTC(g.year,g.month-1,g.day,g.hour,g.minute));
 }
-// Address -> [lon,lat] via Mapbox geocoding, limited to Southern California (Santa Barbara /
-// Bakersfield down to San Diego) so typos can't match a place across the country.
-// Falls back to OpenStreetMap Nominatim with the same box.
-var SOCAL="-121.0,32.5,-114.0,35.8";
+function laClock(d){return d.toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit"})}
+function inSoCal(lon,lat){return lon>=SOCAL[0]&&lat>=SOCAL[1]&&lon<=SOCAL[2]&&lat<=SOCAL[3]}
+function secs(s){return parseFloat(s)||0}
+function wp(ll){return{location:{latLng:{latitude:ll[1],longitude:ll[0]}}}}
+function getJSON(r){return r.json()}
+
+// Address -> {ll:[lon,lat], label}, limited to Southern California (Santa Barbara / Bakersfield
+// down to San Diego) so typos can't match a place across the country. Uses the Maps JavaScript API
+// geocoder, which (unlike the Geocoding web service) accepts website-restricted keys.
+// Falls back to OpenStreetMap Nominatim.
+var gmapsP=null;
+function loadGmaps(){
+ if(gmapsP)return gmapsP;
+ gmapsP=new Promise(function(res,rej){
+  window.__gmInit=function(){res(window.google.maps)};
+  var s=document.createElement("script");
+  s.src="https://maps.googleapis.com/maps/api/js?key="+GKEY+"&loading=async&callback=__gmInit";
+  s.async=true;s.onerror=function(){gmapsP=null;rej(new Error("gmaps"))};
+  document.head.appendChild(s);
+ });
+ return gmapsP;
+}
+// If the Maps JavaScript API is unavailable or not enabled, Google's loader can hang rather than
+// fail, so give it 6 seconds before falling back.
+function within(ms,p){return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"))},ms)})])}
 function geocode(q,sig){
- return fetch("https://api.mapbox.com/search/geocode/v6/forward?country=us&limit=1&proximity=-118.2437,34.0522&bbox="+SOCAL+"&q="+encodeURIComponent(q)+"&access_token="+MAPBOX,{signal:sig,referrerPolicy:"no-referrer-when-downgrade"})
- .then(function(r){return r.json()})
- .then(function(d){var f=d.features&&d.features[0];if(!f)throw new Error("geo");return{ll:f.geometry.coordinates.join(","),label:f.properties.full_address||f.properties.name}})
+ return within(6000,loadGmaps()
+ .then(function(gm){return gm.importLibrary("geocoding")})
+ .then(function(lib){return new lib.Geocoder().geocode({address:q,componentRestrictions:{country:"US"},bounds:{south:SOCAL[1],west:SOCAL[0],north:SOCAL[3],east:SOCAL[2]}})}))
+ .then(function(r){var f=r.results&&r.results[0];if(!f)throw new Error("geo");var l=f.geometry.location;if(!inSoCal(l.lng(),l.lat()))throw new Error("far");return{ll:[l.lng(),l.lat()],label:f.formatted_address}})
  .catch(function(e){
   if(sig.aborted)throw e;
-  return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox="+SOCAL+"&bounded=1&q="+encodeURIComponent(q),{signal:sig})
-  .then(function(r){return r.json()})
-  .then(function(g){if(!g.length)throw new Error("geo");return{ll:g[0].lon+","+g[0].lat,label:g[0].display_name}});
+  return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox="+SOCAL.join(",")+"&bounded=1&q="+encodeURIComponent(q),{signal:sig})
+  .then(getJSON)
+  .then(function(g){if(!g.length)throw new Error("geo");return{ll:[+g[0].lon,+g[0].lat],label:g[0].display_name}});
  });
 }
+function gRoute(body,mask,sig){
+ return fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{method:"POST",signal:sig,referrerPolicy:RP,
+  headers:{"Content-Type":"application/json","X-Goog-Api-Key":GKEY,"X-Goog-FieldMask":mask},body:JSON.stringify(body)})
+ .then(getJSON).then(function(d){if(!d.routes||!d.routes.length)throw new Error("noroute");return d.routes[0]});
+}
+function drives(home,tThere,tBack,sig){
+ var m="routes.duration,routes.distanceMeters",o={travelMode:"DRIVE",routingPreference:"TRAFFIC_AWARE_OPTIMAL"};
+ return Promise.all([
+  gRoute(Object.assign({origin:wp(home),destination:wp(ARENA),departureTime:tThere.toISOString()},o),m,sig),
+  gRoute(Object.assign({origin:wp(ARENA),destination:wp(home),departureTime:tBack.toISOString()},o),m,sig)])
+ .then(function(r){return{google:true,mi:r[0].distanceMeters/1609.34,there:secs(r[0].duration)/60,back:secs(r[1].duration)/60}})
+ .catch(function(e){
+  if(sig.aborted)throw e;
+  return fetch("https://router.project-osrm.org/route/v1/driving/"+home.join(",")+";"+ARENA.join(",")+"?overview=false",{signal:sig}).then(getJSON)
+  .then(function(d){
+   if(!d.routes||!d.routes.length)throw new Error("route");
+   var b=d.routes[0].duration/60;
+   return{google:false,mi:d.routes[0].distance/1609.34,there:b*ARRIVE,back:b*RETURN,base:b};
+  });
+ });
+}
+// Transit route -> {dur (s), start: when you start walking, lines: route names in order}
+function transitInfo(r,fallbackStart){
+ var st=(r.legs&&r.legs[0]&&r.legs[0].steps)||[],walk=0,first=null,lines=[];
+ st.forEach(function(s){
+  if(s.travelMode==="TRANSIT"){var t=s.transitDetails||{},l=t.transitLine||{},n=l.nameShort||l.name;
+   if(!first&&t.stopDetails)first=new Date(t.stopDetails.departureTime);
+   if(n&&lines[lines.length-1]!==n)lines.push(n)}
+  else if(!first)walk+=secs(s.staticDuration);
+ });
+ return{dur:secs(r.duration),start:first?new Date(first-walk*1000):fallbackStart,lines:lines};
+}
+function transits(home,tArrive,tBack,sig){
+ var m="routes.duration,routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails.stopDetails.departureTime,routes.legs.steps.transitDetails.transitLine.nameShort,routes.legs.steps.transitDetails.transitLine.name";
+ return Promise.all([
+  gRoute({origin:wp(home),destination:wp(ARENA),travelMode:"TRANSIT",arrivalTime:tArrive.toISOString()},m,sig),
+  gRoute({origin:wp(ARENA),destination:wp(home),travelMode:"TRANSIT",departureTime:tBack.toISOString()},m,sig)])
+ .then(function(r){
+  var a=transitInfo(r[0],new Date(tArrive-secs(r[0].duration)*1000)),b=transitInfo(r[1],tBack),home=new Date(+b.start+b.dur*1000);
+  return{there:a.dur/60,leave:a.start,linesThere:a.lines,
+   back:(home-tBack)/60000,wait:(b.start-tBack)/60000,firstHome:b.start,homeAt:home,linesBack:b.lines};
+ })
+ .catch(function(e){if(sig.aborted)throw e;return null});
+}
+
 var tmr,ctl,seq=0,lastQ="";
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
@@ -143,7 +214,7 @@ function lookup(force){
  if(q===lastQ&&!force)return;
  lastQ=q;cancelLookup();
  if(q.length<3){$("zhint").textContent=q?"Enter a street address, city, or ZIP.":"";return}
- $("zhint").textContent="Looking up route…";
+ $("zhint").textContent="Looking up routes…";
  live(q);
 }
 $("addr").oninput=function(){if($("addr").value.trim()!==lastQ)$("zhint").textContent="Press Enter or Look up to find the route."};
@@ -151,32 +222,34 @@ $("addr").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();lookup()}
 $("addr").onchange=function(){lookup()};
 $("go").onclick=function(){lookup(true)};
 function live(q){
- var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},12000),sat=nextSat(),day=ymd(sat),place;
+ var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},15000),sat=nextSat(),place,
+  tThere=laDate(sat,17,45),tArrive=laDate(sat,18,45),tBack=laDate(sat,22,30);
  geocode(q,c.signal)
  .then(function(g){
   place=g.label;
-  var home=g.ll;
-  return Promise.all([mbRoute(home,ARENA,day+"T"+LEAVE,c.signal),mbRoute(ARENA,home,day+"T"+LEAVE_HOME,c.signal)])
-  .then(function(r){return{mapbox:true,mi:r[0].distance/1609.34,there:r[0].duration/60,back:r[1].duration/60}})
-  .catch(function(e){
-   if(c.signal.aborted)throw e;
-   return fetch("https://router.project-osrm.org/route/v1/driving/"+home+";"+ARENA+"?overview=false",{signal:c.signal}).then(function(r){return r.json()})
-   .then(function(d){
-    if(!d.routes||!d.routes.length)throw new Error("route");
-    var b=d.routes[0].duration/60;
-    return{mapbox:false,mi:d.routes[0].distance/1609.34,there:b*ARRIVE,back:b*RETURN,base:b};
-   });
-  });
+  return Promise.all([drives(g.ll,tThere,tBack,c.signal),transits(g.ll,tArrive,tBack,c.signal)]);
  })
- .then(function(x){
+ .then(function(r){
   clearTimeout(to);
   if(id!==seq)return;
   ctl=null;
-  $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);$("trmin").value=Math.round(x.there*1.6+20);
-  var when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
-  $("zhint").textContent=x.mapbox
-   ?"Route from "+place+": "+x.mi.toFixed(1)+" road miles. Drive times use Mapbox’s typical traffic for "+when+", leaving home at 5:45 PM and leaving the arena at 10:30 PM. Transit time is a rough estimate. Edit any of them as needed."
-   :"Route from "+place+": "+x.mi.toFixed(1)+" road miles, "+Math.round(x.base)+" min with no traffic. Traffic data was unavailable, so drive times are rough estimates (×"+ARRIVE+" there, ×"+RETURN+" home). Check Google Maps for a Saturday 5:45 PM departure and edit as needed.";
+  var x=r[0],t=r[1],when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}),L=[];
+  $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);
+  L.push("Route from "+place+": "+x.mi.toFixed(1)+" road miles.");
+  L.push(x.google
+   ?"Driving ("+when+", typical traffic): "+Math.round(x.there)+" min leaving home at 5:45 PM; "+Math.round(x.back)+" min home leaving the arena at 10:30 PM."
+   :"Driving: traffic data was unavailable, so times are rough estimates ("+Math.round(x.base)+" min with no traffic, ×"+ARRIVE+" there, ×"+RETURN+" home).");
+  if(t){
+   $("trmin").value=Math.round(t.there);$("trret").value=Math.round(t.back);
+   L.push("Transit there: leave by "+laClock(t.leave)+" to arrive by 6:45 PM"+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
+   L.push((t.wait>60?"⚠️ No late transit home: the next trip after 10:30 PM leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
+    :"Transit home: leave the arena 10:30 PM"+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
+  }else{
+   $("trmin").value=Math.round(x.there*1.6+20);$("trret").value=Math.round(x.there*1.6+20);
+   L.push("Transit: schedules were unavailable, so transit times are rough estimates.");
+  }
+  L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
+  $("zhint").textContent=L.join("\n");
   calc();
  })
  .catch(function(){
@@ -188,7 +261,7 @@ function live(q){
 }
 
 function model(n){
- var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),rt=mi*2,fuel;
+ var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tt=t+tb,rt=mi*2,fuel;
  if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
  var car=fuel+num("park");
  var manual=$("fare").value!=="";
@@ -197,12 +270,12 @@ function model(n){
  var tr=num("tfare")*n+num("spark");
  var cw=num("tpark")+num("texit"),cwk=num("twalk")*2,rw=num("rwait1")+num("rwait2"),rwk=num("rwalk")*2;
  return{car:car,ride:ride,tr:tr,fuel:fuel,
-  time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:t*2},
-  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
+  time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:tt},
+  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:[tt*0.7,tt*0.15,tt*0.15]}};
 }
 
 function calc(){
- if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")){
+ if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")&&!num("trret")){
   $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
  }
