@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arena Trip Calculator: Crypto.com Arena</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#14161f;--mut:#5d6477;--line:#e3e6ef;--acc:#5b4bdb;--car:#e8833a;--ride:#2a9d8f;--tr:#3a6fe8;--good:#1b8a4b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a}}
+:root[data-theme="dark"]{--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:900px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.05rem;margin:0 0 12px}
+.sub{color:var(--mut);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:3px}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.hint{font-size:.8rem;color:var(--mut);margin-top:8px}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.badge{background:var(--acc);color:#fff;border-radius:999px;padding:4px 12px;font-size:.82rem;font-weight:600}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:520px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.8rem;color:var(--mut);font-weight:600}
+.best{color:var(--good);font-weight:700}
+.sec td{background:var(--bg);font-weight:700;text-align:left;font-size:.8rem;color:var(--mut)}
+.insight{border-left:4px solid var(--acc);padding:4px 12px;margin:0}
+.bar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:4px 0 2px}
+.bar span{display:block}
+.row{margin-bottom:14px}.row b{font-size:.9rem}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--mut);margin-top:4px}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+</style>
+</head>
+<body>
+<main>
+<h1>🏟️ Arena Trip Calculator</h1>
+<p class="sub">Compare cost and time to get to and from Crypto.com Arena (1111 S Figueroa St) for a Saturday 7 PM event. Every number below is editable.</p>
+
+<div class="card">
+<h2>Your trip</h2>
+<div class="grid">
+<div><label>Quick-select area</label><select id="preset"></select></div>
+<div><label>Home ZIP</label><input id="zip" inputmode="numeric" maxlength="5" placeholder="e.g. 90401"></div>
+<div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
+<div><label>One-way drive (min)</label><input id="drive" type="number" min="0"></div>
+<div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div>
+<div><label>Traffic factor for lookups (×)</label><input id="traffic" type="number" value="1.25" step="0.05" min="1"></div>
+</div>
+<p class="hint" id="zhint"></p>
+</div>
+
+<div class="card">
+<h2>Assumptions</h2>
+<div class="grid">
+<div><label>Vehicle type</label><select id="pt"><option value="gas">Gas / hybrid</option><option value="ev">Electric</option></select></div>
+<div id="gasA"><label>MPG</label><input id="mpg" type="number" value="28" min="1"></div>
+<div id="gasB"><label>Gas ($/gal)</label><input id="gas" type="number" value="6" step="0.05"></div>
+<div id="evA" hidden><label>Charging</label><select id="chg"><option value="0.26">Home ($0.26/kWh)</option><option value="0.48">Public fast/L2 ($0.48)</option><option value="0.32">Workplace ($0.32)</option></select></div>
+<div id="evB" hidden><label>kWh per mile</label><input id="kwh" type="number" value="0.30" step="0.01"></div>
+<div><label>Arena parking ($)</label><input id="park" type="number" value="40"></div>
+<div><label>Rideshare fare, inbound ($)</label><input id="fare" type="number" step="0.5" placeholder="auto"></div>
+<div><label>Post-event surge (×)</label><input id="surge" type="number" value="1.35" step="0.05"></div>
+<div><label>Tip (%)</label><input id="tip" type="number" value="10"></div>
+<div><label>Transit fare, round trip ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
+<div><label>Station parking ($, 0 if none)</label><input id="spark" type="number" value="3" step="0.5"></div>
+</div>
+<p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
+</div>
+
+<div id="out"></div>
+</main>
+
+<script>
+(function(){
+// [name, zip, miles, drive min, transit min]
+var P=[["Santa Monica","90401",16,40,65],["Pasadena","91101",11,28,55],["Long Beach","90802",22,35,70],["Sherman Oaks","91403",17,35,85],["Downtown LA","90017",1,8,15],["Hollywood","90028",8,25,40]];
+var $=function(i){return document.getElementById(i)};
+var sel=$("preset");
+sel.innerHTML='<option value="">Custom (enter below)</option>'+P.map(function(p,i){return '<option value="'+i+'">'+p[0]+' '+p[1]+'</option>'}).join("");
+
+function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v}
+function money(x){return "$"+x.toFixed(2)}
+function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m":m+"m"}
+
+function fill(p){$("miles").value=p[2];$("drive").value=p[3];$("trmin").value=p[4];$("zip").value=p[1]}
+sel.onchange=function(){if(sel.value!=="")fill(P[+sel.value]);calc()};
+var presetZip=function(){
+ var z=$("zip").value.trim(),i=P.findIndex(function(p){return p[1]===z});
+ if(i>=0){sel.value=i;fill(P[i]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[i][0]+"."}
+ else if(z.length===5){sel.value="";$("zhint").textContent="This ZIP isn’t in the built-in list. Enter miles and minutes manually (try Google Maps for a Saturday ~5 PM drive time)."}
+ calc()};
+$("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
+document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="zip"&&e.id!=="preset")e.oninput=calc;e.onchange=e.onchange||calc});
+$("pt").onchange=$("pt").onchange;
+
+var tmr;
+$("zip").oninput=function(){
+ var z=$("zip").value.trim();
+ if(!/^\d{5}$/.test(z))return;
+ clearTimeout(tmr);
+ $("zhint").textContent="Looking up route…";
+ tmr=setTimeout(function(){live(z)},500);
+};
+function live(z){
+ var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},8000);
+ fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&postalcode="+z,{signal:ctl.signal})
+ .then(function(r){return r.json()})
+ .then(function(g){
+  if(!g.length)throw new Error("zip");
+  return fetch("https://router.project-osrm.org/route/v1/driving/"+g[0].lon+","+g[0].lat+";-118.2673,34.0430?overview=false",{signal:ctl.signal}).then(function(r){return r.json()});
+ })
+ .then(function(d){
+  clearTimeout(to);
+  if(!d.routes||!d.routes.length)throw new Error("route");
+  var mi=d.routes[0].distance/1609.34,mn=d.routes[0].duration/60*(num("traffic")||1);
+  sel.value="";
+  $("miles").value=mi.toFixed(1);$("drive").value=Math.round(mn);$("trmin").value=Math.round(mn*1.6+20);
+  $("zhint").textContent="Live route from ZIP "+z+": "+mi.toFixed(1)+" road miles. Drive time includes the traffic factor above; transit time is a rough estimate (edit as needed).";
+  calc();
+ })
+ .catch(function(){
+  clearTimeout(to);
+  presetZip();
+  if(!P.some(function(p){return p[1]===z}))$("zhint").textContent="Couldn’t look up that ZIP live. Enter miles and minutes manually.";
+ });
+}
+
+function model(n){
+ var mi=num("miles"),d=num("drive"),t=num("trmin"),rt=mi*2,fuel;
+ if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
+ var car=fuel+num("park");
+ var inb=$("fare").value!==""?num("fare"):3+1.85*mi+0.4*d;
+ var ride=(inb+inb*num("surge"))*(1+num("tip")/100);
+ var tr=num("tfare")*n+num("spark");
+ return{car:car,ride:ride,tr:tr,fuel:fuel,
+  time:{car:d*2+46,ride:d*2+28,tr:t*2},
+  fr:{car:[d*2,30,16],ride:[d*2,28,0],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
+}
+
+function calc(){
+ var N=[1,2,3],m=N.map(model),M=m[0],names={car:"Personal car",ride:"Rideshare",tr:"Public transit"},col={car:"var(--car)",ride:"var(--ride)",tr:"var(--tr)"},k=["car","ride","tr"];
+ function pp(mode,i){return m[i][mode]/N[i]}
+ function minOf(f){var b=k[0];k.forEach(function(x){if(f(x)<f(b))b=x});return b}
+ var fast=minOf(function(x){return M.time[x]}),solo=minOf(function(x){return pp(x,0)}),grp=minOf(function(x){return pp(x,2)});
+ var h='<div class="card"><h2>Results</h2><div class="badges"><span class="badge">⚡ Fastest overall: '+names[fast]+'</span><span class="badge">💵 Lowest cost (solo): '+names[solo]+'</span><span class="badge">👥 Best group value: '+names[grp]+'</span></div>';
+ h+='<div class="scroll"><table><tr><th></th><th>Riders</th>'+k.map(function(x){return '<th>'+names[x]+'</th>'}).join("")+'</tr>';
+ h+='<tr class="sec"><td colspan="5">Total group cost</td></tr>';
+ N.forEach(function(n,i){var b=minOf(function(x){return m[i][x]});h+='<tr><td></td><td>'+n+'</td>'+k.map(function(x){return '<td class="'+(x===b?'best':'')+'">'+money(m[i][x])+'</td>'}).join("")+'</tr>'});
+ h+='<tr class="sec"><td colspan="5">Cost per person</td></tr>';
+ N.forEach(function(n,i){var b=minOf(function(x){return pp(x,i)});h+='<tr><td></td><td>'+n+'</td>'+k.map(function(x){return '<td class="'+(x===b?'best':'')+'">'+money(pp(x,i))+'</td>'}).join("")+'</tr>'});
+ h+='<tr class="sec"><td colspan="5">Round-trip time</td></tr><tr><td></td><td>any</td>'+k.map(function(x){return '<td class="'+(x===fast?'best':'')+'">'+dur(M.time[x])+'</td>'}).join("")+'</tr></table></div></div>';
+
+ // tipping point
+ var tf=num("tfare"),sp=num("spark"),msg=[];
+ ["car","ride"].forEach(function(x){
+  var c=m[0][x],need=null;
+  for(var n=1;n<=6;n++){if(c/n<=tf+sp/n){need=n;break}}
+  if(need===null)msg.push(names[x]+" doesn’t beat transit per person even with 6 riders.");
+  else if(need===1)msg.push(names[x]+" is already cheaper than transit even solo.");
+  else msg.push(names[x]+" ("+money(c)+" per vehicle) matches transit’s per-person cost at <b>"+need+" riders</b> ("+money(c/need)+" vs "+money(tf+sp/need)+")"+(need>3?" (a typical car holds 4–5, so this is a tight squeeze).":"."));
+ });
+ h+='<div class="card"><h2>Tipping point: when does splitting beat transit?</h2><p class="insight">'+msg.join("<br>")+'</p></div>';
+
+ // friction
+ h+='<div class="card"><h2>Where your time goes (round trip)</h2>';
+ var mx=Math.max.apply(null,k.map(function(x){return M.time[x]}))||1;
+ k.forEach(function(x){var f=M.fr[x],tot=M.time[x];
+  h+='<div class="row"><b>'+names[x]+'</b> · '+dur(tot)+'<div class="bar" style="width:'+(tot/mx*100)+'%">'+
+  '<span style="background:'+col[x]+';width:'+(f[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(f[1]/tot*100)+'%"></span><span style="background:var(--line);width:'+(f[2]/tot*100)+'%"></span></div></div>'});
+ h+='<div class="leg"><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:var(--line);border:1px solid var(--mut)"></i>Walking</span><span><i style="background:var(--car)"></i>Moving (color = mode)</span></div>';
+ h+='<p class="hint">Assumptions: car adds 15 min to park, 15 to exit, and an 8-min walk each way; rideshare adds 8 min wait before and 20 min after the event; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
+ $("out").innerHTML=h;
+}
+sel.value="0";fill(P[0]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[0][0]+".";
+calc();
+})();
+</script>
+</body>
+</html>
