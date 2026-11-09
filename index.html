@@ -123,6 +123,8 @@ td.best .tot,td.best .per{color:var(--good)}
 <div><label>Rideshare: wait for ride there</label><input id="rwait1" type="number" value="8" min="0"></div>
 <div><label>Rideshare: wait for pickup after</label><input id="rwait2" type="number" value="20" min="0"></div>
 <div><label>Rideshare: walk zone ↔ arena, each way</label><input id="rwalk" type="number" value="5" min="0"></div>
+<div><label>Transit: buffer at first stop (there)</label><input id="tbuf" type="number" value="5" min="0"></div>
+<div><label>Transit: post-event crowd delay (home)</label><input id="tcrowd" type="number" value="10" min="0"></div>
 </div>
 <p class="hint">Rideshare drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south), not the front door. Check your ticket on the night, as zones can change by event.</p>
 </div>
@@ -259,7 +261,7 @@ function transits(home,tArrive,tBack,sig){
   gRoute({origin:wp(ARENA),destination:wp(home),travelMode:"TRANSIT",departureTime:tBack.toISOString()},m,sig)])
  .then(function(r){
   var a=transitInfo(r[0],new Date(tArrive-secs(r[0].duration)*1000)),b=transitInfo(r[1],tBack),home=new Date(+b.start+b.dur*1000);
-  return{there:a.dur/60,leave:a.start,linesThere:a.lines,
+  return{there:(tArrive-a.start)/60000,leave:a.start,linesThere:a.lines,
    back:(home-tBack)/60000,wait:(b.start-tBack)/60000,firstHome:b.start,homeAt:home,linesBack:b.lines,
    ride:a.ride+b.ride,walk:a.walk+b.walk,fareThere:a.fare,fareBack:b.fare};
  })
@@ -319,7 +321,7 @@ function live(q){
   if(t){
    $("trmin").value=Math.round(t.there);$("trret").value=Math.round(t.back);
    tsplit={ride:t.ride,walk:t.walk};
-   L.push("Transit there: leave by "+laClock(t.leave)+" to be seated by "+laClock(E.seat)+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
+   L.push("Transit there: leave by "+laClock(new Date(+t.leave-num("tbuf")*60000))+" (with a "+num("tbuf")+"-min buffer at the first stop) to be seated by "+laClock(E.seat)+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
    L.push((t.wait>60?"⚠️ No late transit home: the next trip after "+laClock(E.end)+" leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
     :"Transit home: leave the arena at "+laClock(E.end)+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
   }else{
@@ -345,13 +347,13 @@ function live(q){
  });
 }
 
-function trSplit(tt){ // [riding, waiting, walking] minutes for the transit time bar
- if(!tsplit)return[tt*0.7,tt*0.15,tt*0.15];
+function trSplit(tt,extra){ // [riding, waiting, walking] minutes for the transit time bar; extra = buffers (waiting)
+ if(!tsplit)return[tt*0.7,tt*0.15+extra,tt*0.15];
  var r=tsplit.ride,w=tsplit.walk,sc=r+w>tt&&r+w>0?tt/(r+w):1;
- r*=sc;w*=sc;return[r,tt-r-w,w];
+ r*=sc;w*=sc;return[r,tt-r-w+extra,w];
 }
 function model(n){
- var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tt=t+tb,rt=mi*2,fuel;
+ var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tx=num("tbuf")+num("tcrowd"),tt=t+tb+tx,rt=mi*2,fuel;
  if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
  var car=fuel+num("park");
  var manual=$("fare").value!=="";
@@ -364,7 +366,7 @@ function model(n){
    ride:[["Fare there",inb],["Fare home (×"+num("surge")+" surge)",retS],["Tip ("+num("tip")+"%)",tipAmt]],
    tr:[["Fares ("+n+" × "+money(num("tfare"))+" round trip)",num("tfare")*n],["Station parking",num("spark")]]},
   time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:tt},
-  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:trSplit(tt)}};
+  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:trSplit(t+tb,tx)}};
 }
 
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -438,7 +440,7 @@ function calc(){
   (order[0]!=="car"?'Driving loses '+mins(f.car[1]+f.car[2])+' to parking, exiting and walking.':'Parking and walking still cost '+mins(f.car[1]+f.car[2])+' of that trip.'));
  var late=trip&&trip.late?'<li class="warn"><b>⚠️ Late-night transit gap:</b> after the event the next transit trip home leaves at <b>'+trip.late.first+'</b>, arriving around '+trip.late.home+'. Plan on a ride home if you take transit there.</li>':'';
  h+='<div class="card"><h2>💡 Trade-offs &amp; break-even</h2><ul class="ins">'+late+I.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>';
- h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; '+(tsplit?'transit riding and walking come from Google’s schedule, and waiting is the rest.':'transit time is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
+ h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
  $("edit").onclick=function(){window.scrollTo({top:0,behavior:"smooth"});$("addr").focus({preventScroll:true})};
 }
