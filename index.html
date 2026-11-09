@@ -18,6 +18,8 @@ h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.05rem;margin:0 0 12px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:3px}
 input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.addr{margin-bottom:12px}.addrrow{display:flex;gap:8px}
+button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .badge{background:var(--acc);color:#fff;border-radius:999px;padding:4px 12px;font-size:.82rem;font-weight:600}
@@ -43,8 +45,9 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 
 <div class="card">
 <h2>Your trip</h2>
+<div class="addr"><label for="addr">Home address (or city / ZIP)</label>
+<div class="addrrow"><input id="addr" autocomplete="street-address" placeholder="e.g. 3333 Bristol St, Costa Mesa" autofocus><button id="go" type="button">Look up</button></div></div>
 <div class="grid">
-<div><label>Home ZIP</label><input id="zip" inputmode="numeric" maxlength="5" placeholder="e.g. 90401" autofocus></div>
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
 <div><label>Drive there, leave 5:45 PM (min)</label><input id="drive" type="number" min="0"></div>
 <div><label>Drive home, leave 10:30 PM (min)</label><input id="dret" type="number" min="0"></div>
@@ -94,7 +97,7 @@ function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v}
 function money(x){return "$"+x.toFixed(2)}
 function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m":m+"m"}
 
-// Live ZIP lookups: tmr = pending debounce, ctl = in-flight request, seq = id of the latest lookup.
+// Live address lookups: tmr = pending timer, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
 // Drive times come from Mapbox's traffic-aware routing for the coming Saturday: leaving home
 // at 5:45 PM, and leaving the arena at 10:30 PM. Mapbox public token; restrict it to this
@@ -114,25 +117,45 @@ function mbRoute(a,b,t,sig){
  return fetch("https://api.mapbox.com/directions/v5/mapbox/driving-traffic/"+a+";"+b+"?overview=false&depart_at="+t+"&access_token="+MAPBOX,{signal:sig,referrerPolicy:"no-referrer-when-downgrade"})
  .then(function(r){return r.json()}).then(function(d){if(!d.routes||!d.routes.length)throw new Error("mapbox");return d.routes[0]});
 }
-var tmr,ctl,seq=0;
+// Address -> [lon,lat] via Mapbox geocoding, limited to Southern California (Santa Barbara /
+// Bakersfield down to San Diego) so typos can't match a place across the country.
+// Falls back to OpenStreetMap Nominatim with the same box.
+var SOCAL="-121.0,32.5,-114.0,35.8";
+function geocode(q,sig){
+ return fetch("https://api.mapbox.com/search/geocode/v6/forward?country=us&limit=1&proximity=-118.2437,34.0522&bbox="+SOCAL+"&q="+encodeURIComponent(q)+"&access_token="+MAPBOX,{signal:sig,referrerPolicy:"no-referrer-when-downgrade"})
+ .then(function(r){return r.json()})
+ .then(function(d){var f=d.features&&d.features[0];if(!f)throw new Error("geo");return{ll:f.geometry.coordinates.join(","),label:f.properties.full_address||f.properties.name}})
+ .catch(function(e){
+  if(sig.aborted)throw e;
+  return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox="+SOCAL+"&bounded=1&q="+encodeURIComponent(q),{signal:sig})
+  .then(function(r){return r.json()})
+  .then(function(g){if(!g.length)throw new Error("geo");return{ll:g[0].lon+","+g[0].lat,label:g[0].display_name}});
+ });
+}
+var tmr,ctl,seq=0,lastQ="";
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
-document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="zip")e.oninput=calc;e.onchange=e.onchange||calc});
+document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="addr")e.oninput=calc;e.onchange=e.onchange||calc});
 
-$("zip").oninput=function(){
- var z=$("zip").value.trim();
- cancelLookup();
- if(!/^\d{5}$/.test(z)){$("zhint").textContent=z?"Enter a 5-digit ZIP to look up a route.":"";return}
+// Look up when the user presses Enter, clicks "Look up", or leaves the field after changing it.
+function lookup(force){
+ var q=$("addr").value.trim();
+ if(q===lastQ&&!force)return;
+ lastQ=q;cancelLookup();
+ if(q.length<3){$("zhint").textContent=q?"Enter a street address, city, or ZIP.":"";return}
  $("zhint").textContent="Looking up route…";
- tmr=setTimeout(function(){live(z)},500);
-};
-function live(z){
- var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},12000),sat=nextSat(),day=ymd(sat);
- fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&postalcode="+z,{signal:c.signal})
- .then(function(r){return r.json()})
+ live(q);
+}
+$("addr").oninput=function(){if($("addr").value.trim()!==lastQ)$("zhint").textContent="Press Enter or Look up to find the route."};
+$("addr").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();lookup()}};
+$("addr").onchange=function(){lookup()};
+$("go").onclick=function(){lookup(true)};
+function live(q){
+ var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},12000),sat=nextSat(),day=ymd(sat),place;
+ geocode(q,c.signal)
  .then(function(g){
-  if(!g.length)throw new Error("zip");
-  var home=g[0].lon+","+g[0].lat;
+  place=g.label;
+  var home=g.ll;
   return Promise.all([mbRoute(home,ARENA,day+"T"+LEAVE,c.signal),mbRoute(ARENA,home,day+"T"+LEAVE_HOME,c.signal)])
   .then(function(r){return{mapbox:true,mi:r[0].distance/1609.34,there:r[0].duration/60,back:r[1].duration/60}})
   .catch(function(e){
@@ -152,15 +175,15 @@ function live(z){
   $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);$("trmin").value=Math.round(x.there*1.6+20);
   var when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
   $("zhint").textContent=x.mapbox
-   ?"Route from ZIP "+z+": "+x.mi.toFixed(1)+" road miles. Drive times use Mapbox’s typical traffic for "+when+", leaving home at 5:45 PM and leaving the arena at 10:30 PM. Transit time is a rough estimate. Edit any of them as needed."
-   :"Route from ZIP "+z+": "+x.mi.toFixed(1)+" road miles, "+Math.round(x.base)+" min with no traffic. Traffic data was unavailable, so drive times are rough estimates (×"+ARRIVE+" there, ×"+RETURN+" home). Check Google Maps for a Saturday 5:45 PM departure and edit as needed.";
+   ?"Route from "+place+": "+x.mi.toFixed(1)+" road miles. Drive times use Mapbox’s typical traffic for "+when+", leaving home at 5:45 PM and leaving the arena at 10:30 PM. Transit time is a rough estimate. Edit any of them as needed."
+   :"Route from "+place+": "+x.mi.toFixed(1)+" road miles, "+Math.round(x.base)+" min with no traffic. Traffic data was unavailable, so drive times are rough estimates (×"+ARRIVE+" there, ×"+RETURN+" home). Check Google Maps for a Saturday 5:45 PM departure and edit as needed.";
   calc();
  })
  .catch(function(){
   clearTimeout(to);
   if(id!==seq)return;
   ctl=null;
-  $("zhint").textContent="Couldn’t look up that ZIP. Enter miles and minutes manually (try Google Maps for a Saturday 5:45 PM departure).";
+  $("zhint").textContent="Couldn’t find a route for that address. Check the spelling (only Southern California addresses are supported), or enter miles and minutes manually (try Google Maps for a Saturday 5:45 PM departure).";
  });
 }
 
@@ -180,7 +203,7 @@ function model(n){
 
 function calc(){
  if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")){
-  $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home ZIP above to look up the route, or fill in miles and minutes yourself.</p></div>';
+  $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
  }
  var N=[1,2,3],m=N.map(model),M=m[0],names={car:"Personal car",ride:"Rideshare",tr:"Public transit"},col={car:"var(--car)",ride:"var(--ride)",tr:"var(--tr)"},k=["car","ride","tr"];
