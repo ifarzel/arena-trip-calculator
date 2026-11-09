@@ -69,7 +69,7 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div><label>Rideshare fare, inbound ($)</label><input id="fare" type="number" step="0.5" placeholder="auto"></div>
 <div><label>Post-event surge (×)</label><input id="surge" type="number" value="1.35" step="0.05"></div>
 <div><label>Tip (%)</label><input id="tip" type="number" value="10"></div>
-<div><label>Transit fare, round trip ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
+<div><label>Transit fare, round trip per person ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
 <div><label>Station parking ($, 0 if none)</label><input id="spark" type="number" value="3" step="0.5"></div>
 </div>
 <p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min, priced separately for each direction using that direction’s drive time; the post-event surge applies to the ride home. A fare entered by hand is used for both directions. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
@@ -179,31 +179,39 @@ function drives(home,tThere,tBack,sig){
   });
  });
 }
-// Transit route -> {dur (s), start: when you start walking, lines: route names in order}
+// Transit route -> {dur (s), start: when you start walking, lines: route names in order,
+// ride/walk: minutes spent on vehicles and on foot, fare: Google's fare in dollars or null}
+function money0(m){var v=m?(+m.units||0)+(m.nanos||0)/1e9:0;return v>0?v:null} // $0 means Google has no fare
 function transitInfo(r,fallbackStart){
- var st=(r.legs&&r.legs[0]&&r.legs[0].steps)||[],walk=0,first=null,lines=[];
+ var st=(r.legs&&r.legs[0]&&r.legs[0].steps)||[],walk=0,lead=0,ride=0,first=null,lines=[];
  st.forEach(function(s){
+  var v=secs(s.staticDuration);
   if(s.travelMode==="TRANSIT"){var t=s.transitDetails||{},l=t.transitLine||{},n=l.nameShort||l.name;
+   ride+=v;
    if(!first&&t.stopDetails)first=new Date(t.stopDetails.departureTime);
    if(n&&lines[lines.length-1]!==n)lines.push(n)}
-  else if(!first)walk+=secs(s.staticDuration);
+  else{walk+=v;if(!first)lead+=v}
  });
- return{dur:secs(r.duration),start:first?new Date(first-walk*1000):fallbackStart,lines:lines};
+ return{dur:secs(r.duration),start:first?new Date(first-lead*1000):fallbackStart,lines:lines,
+  ride:ride/60,walk:walk/60,fare:money0(r.travelAdvisory&&r.travelAdvisory.transitFare)};
 }
 function transits(home,tArrive,tBack,sig){
- var m="routes.duration,routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails.stopDetails.departureTime,routes.legs.steps.transitDetails.transitLine.nameShort,routes.legs.steps.transitDetails.transitLine.name";
+ var m="routes.duration,routes.travelAdvisory.transitFare,routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails.stopDetails.departureTime,routes.legs.steps.transitDetails.transitLine.nameShort,routes.legs.steps.transitDetails.transitLine.name";
  return Promise.all([
   gRoute({origin:wp(home),destination:wp(ARENA),travelMode:"TRANSIT",arrivalTime:tArrive.toISOString()},m,sig),
   gRoute({origin:wp(ARENA),destination:wp(home),travelMode:"TRANSIT",departureTime:tBack.toISOString()},m,sig)])
  .then(function(r){
   var a=transitInfo(r[0],new Date(tArrive-secs(r[0].duration)*1000)),b=transitInfo(r[1],tBack),home=new Date(+b.start+b.dur*1000);
   return{there:a.dur/60,leave:a.start,linesThere:a.lines,
-   back:(home-tBack)/60000,wait:(b.start-tBack)/60000,firstHome:b.start,homeAt:home,linesBack:b.lines};
+   back:(home-tBack)/60000,wait:(b.start-tBack)/60000,firstHome:b.start,homeAt:home,linesBack:b.lines,
+   ride:a.ride+b.ride,walk:a.walk+b.walk,fareThere:a.fare,fareBack:b.fare};
  })
  .catch(function(e){if(sig.aborted)throw e;return null});
 }
 
-var tmr,ctl,seq=0,lastQ="";
+// tsplit = riding/walking minutes from the last transit lookup, so the time bars can show the
+// real split (waiting = whatever is left of the transit total). null = use the rough 70/15/15.
+var tmr,ctl,seq=0,lastQ="",tsplit=null;
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="addr")e.oninput=calc;e.onchange=e.onchange||calc});
@@ -241,13 +249,21 @@ function live(q){
    :"Driving: traffic data was unavailable, so times are rough estimates ("+Math.round(x.base)+" min with no traffic, ×"+ARRIVE+" there, ×"+RETURN+" home).");
   if(t){
    $("trmin").value=Math.round(t.there);$("trret").value=Math.round(t.back);
+   tsplit={ride:t.ride,walk:t.walk};
    L.push("Transit there: leave by "+laClock(t.leave)+" to arrive by 6:45 PM"+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
    L.push((t.wait>60?"⚠️ No late transit home: the next trip after 10:30 PM leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
     :"Transit home: leave the arena 10:30 PM"+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
   }else{
    $("trmin").value=Math.round(x.there*1.6+20);$("trret").value=Math.round(x.there*1.6+20);
+   tsplit=null;
    L.push("Transit: schedules were unavailable, so transit times are rough estimates.");
   }
+  if(t&&(t.fareThere!=null||t.fareBack!=null)){
+   var fa=t.fareThere,fb=t.fareBack,guess=fa==null||fb==null;
+   if(fa==null)fa=fb;if(fb==null)fb=fa;
+   $("tfare").value=(fa+fb).toFixed(2);
+   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Set under Assumptions.");
+  }else if(t)L.push("Google had no fare for this trip, so the transit fare under Assumptions is an estimate.");
   L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
   $("zhint").textContent=L.join("\n");
   calc();
@@ -260,6 +276,11 @@ function live(q){
  });
 }
 
+function trSplit(tt){ // [riding, waiting, walking] minutes for the transit time bar
+ if(!tsplit)return[tt*0.7,tt*0.15,tt*0.15];
+ var r=tsplit.ride,w=tsplit.walk,sc=r+w>tt&&r+w>0?tt/(r+w):1;
+ r*=sc;w*=sc;return[r,tt-r-w,w];
+}
 function model(n){
  var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tt=t+tb,rt=mi*2,fuel;
  if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
@@ -271,7 +292,7 @@ function model(n){
  var cw=num("tpark")+num("texit"),cwk=num("twalk")*2,rw=num("rwait1")+num("rwait2"),rwk=num("rwalk")*2;
  return{car:car,ride:ride,tr:tr,fuel:fuel,
   time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:tt},
-  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:[tt*0.7,tt*0.15,tt*0.15]}};
+  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:trSplit(tt)}};
 }
 
 function calc(){
@@ -309,7 +330,7 @@ function calc(){
   h+='<div class="row"><b>'+names[x]+'</b> · '+dur(tot)+'<div class="bar" style="width:'+(tot/mx*100)+'%">'+
   '<span style="background:'+col[x]+';width:'+(f[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(f[1]/tot*100)+'%"></span><span style="background:var(--line);width:'+(f[2]/tot*100)+'%"></span></div></div>'});
  h+='<div class="leg"><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:var(--line);border:1px solid var(--mut)"></i>Walking</span><span><i style="background:var(--car)"></i>Moving (color = mode)</span></div>';
- h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; driving is the trip there plus the (usually faster) late-evening trip home; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
+ h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; driving is the trip there plus the (usually faster) late-evening trip home; '+(tsplit?'transit riding and walking come from Google’s schedule, and waiting is the rest (transfers and waiting for the first ride home).':'transit time is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
 }
 calc();
