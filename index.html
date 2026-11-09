@@ -46,8 +46,8 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div class="grid">
 <div><label>Home ZIP</label><input id="zip" inputmode="numeric" maxlength="5" placeholder="e.g. 90401" autofocus></div>
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
-<div><label>Drive there, ~6 PM (min)</label><input id="drive" type="number" min="0"></div>
-<div><label>Drive home, ~11 PM (min)</label><input id="dret" type="number" min="0"></div>
+<div><label>Drive there, leave 5:45 PM (min)</label><input id="drive" type="number" min="0"></div>
+<div><label>Drive home, leave 10:30 PM (min)</label><input id="dret" type="number" min="0"></div>
 <div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div></div>
 <p class="hint" id="zhint"></p>
 </div>
@@ -96,9 +96,24 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 
 // Live ZIP lookups: tmr = pending debounce, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
-// The routing service returns no-traffic times; these fixed multipliers turn them into
-// a Saturday ~6 PM drive there and a ~11 PM drive home (both fields stay editable).
+// Drive times come from Mapbox's traffic-aware routing for the coming Saturday: leaving home
+// at 5:45 PM, and leaving the arena at 10:30 PM. Mapbox public token; restrict it to this
+// site's URL in the Mapbox account so others can't use it elsewhere.
+var MAPBOX="pk.eyJ1IjoicmFmaWxheiIsImEiOiJjbXc4bDUyMHUwdXdkMnhveXVmbjF5M3YxIn0.jULjm7WpVSmk0SKtYFYRDA";
+var ARENA="-118.2673,34.0430",LEAVE="17:45",LEAVE_HOME="22:30";
+// Fallback if Mapbox fails: OSRM's no-traffic time times these rough multipliers.
 var ARRIVE=1.25,RETURN=1.05;
+function pad(n){return (n<10?"0":"")+n}
+function nextSat(){ // next Saturday whose 5:45 PM departure hasn't passed yet
+ var d=new Date(),add=(6-d.getDay()+7)%7;
+ if(add===0&&d.getHours()*60+d.getMinutes()>=17*60+45)add=7;
+ d.setDate(d.getDate()+add);return d;
+}
+function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function mbRoute(a,b,t,sig){
+ return fetch("https://api.mapbox.com/directions/v5/mapbox/driving-traffic/"+a+";"+b+"?overview=false&depart_at="+t+"&access_token="+MAPBOX,{signal:sig})
+ .then(function(r){return r.json()}).then(function(d){if(!d.routes||!d.routes.length)throw new Error("mapbox");return d.routes[0]});
+}
 var tmr,ctl,seq=0;
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
@@ -112,28 +127,40 @@ $("zip").oninput=function(){
  tmr=setTimeout(function(){live(z)},500);
 };
 function live(z){
- var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},8000);
+ var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},12000),sat=nextSat(),day=ymd(sat);
  fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&postalcode="+z,{signal:c.signal})
  .then(function(r){return r.json()})
  .then(function(g){
   if(!g.length)throw new Error("zip");
-  return fetch("https://router.project-osrm.org/route/v1/driving/"+g[0].lon+","+g[0].lat+";-118.2673,34.0430?overview=false",{signal:c.signal}).then(function(r){return r.json()});
+  var home=g[0].lon+","+g[0].lat;
+  return Promise.all([mbRoute(home,ARENA,day+"T"+LEAVE,c.signal),mbRoute(ARENA,home,day+"T"+LEAVE_HOME,c.signal)])
+  .then(function(r){return{mapbox:true,mi:r[0].distance/1609.34,there:r[0].duration/60,back:r[1].duration/60}})
+  .catch(function(e){
+   if(c.signal.aborted)throw e;
+   return fetch("https://router.project-osrm.org/route/v1/driving/"+home+";"+ARENA+"?overview=false",{signal:c.signal}).then(function(r){return r.json()})
+   .then(function(d){
+    if(!d.routes||!d.routes.length)throw new Error("route");
+    var b=d.routes[0].duration/60;
+    return{mapbox:false,mi:d.routes[0].distance/1609.34,there:b*ARRIVE,back:b*RETURN,base:b};
+   });
+  });
  })
- .then(function(d){
+ .then(function(x){
   clearTimeout(to);
   if(id!==seq)return;
-  if(!d.routes||!d.routes.length)throw new Error("route");
-  var mi=d.routes[0].distance/1609.34,base=d.routes[0].duration/60;
   ctl=null;
-  $("miles").value=mi.toFixed(1);$("drive").value=Math.round(base*ARRIVE);$("dret").value=Math.round(base*RETURN);$("trmin").value=Math.round(base*ARRIVE*1.6+20);
-  $("zhint").textContent="Live route from ZIP "+z+": "+mi.toFixed(1)+" road miles, "+Math.round(base)+" min with no traffic. Drive times include typical Saturday traffic; transit time is a rough estimate. Edit any of them as needed.";
+  $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);$("trmin").value=Math.round(x.there*1.6+20);
+  var when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+  $("zhint").textContent=x.mapbox
+   ?"Route from ZIP "+z+": "+x.mi.toFixed(1)+" road miles. Drive times use Mapbox’s typical traffic for "+when+", leaving home at 5:45 PM and leaving the arena at 10:30 PM. Transit time is a rough estimate. Edit any of them as needed."
+   :"Route from ZIP "+z+": "+x.mi.toFixed(1)+" road miles, "+Math.round(x.base)+" min with no traffic. Traffic data was unavailable, so drive times are rough estimates (×"+ARRIVE+" there, ×"+RETURN+" home). Check Google Maps for a Saturday 5:45 PM departure and edit as needed.";
   calc();
  })
  .catch(function(){
   clearTimeout(to);
   if(id!==seq)return;
   ctl=null;
-  $("zhint").textContent="Couldn’t look up that ZIP. Enter miles and minutes manually (try Google Maps for a Saturday ~6 PM drive time).";
+  $("zhint").textContent="Couldn’t look up that ZIP. Enter miles and minutes manually (try Google Maps for a Saturday 5:45 PM departure).";
  });
 }
 

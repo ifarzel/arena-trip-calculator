@@ -2,7 +2,7 @@
 
 A single-page calculator comparing the cost and time of getting to Crypto.com Arena (1111 S Figueroa St, Los Angeles) by personal car, rideshare, or public transit for 1–3 riders.
 
-- Enter a home ZIP for a live route lookup (OpenStreetMap Nominatim + OSRM); drive times there (~6 PM) and home (~11 PM) are estimated from the no-traffic route time. You can also type miles and minutes yourself.
+- Enter a home ZIP for a live route lookup (OpenStreetMap Nominatim for the ZIP, Mapbox traffic-aware routing for the coming Saturday: leaving home 5:45 PM, leaving the arena 10:30 PM; falls back to OSRM with a rough traffic multiplier). You can also type miles and minutes yourself.
 - Every assumption (gas price, MPG/EV efficiency, parking, rideshare surge, tip, transit fare) is editable.
 - Shows per-person cost, the rider count at which splitting a car/rideshare beats transit, and where the round-trip time goes.
 
