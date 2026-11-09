@@ -48,10 +48,7 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
 <div><label>Drive there, ~6 PM (min)</label><input id="drive" type="number" min="0"></div>
 <div><label>Drive home, ~11 PM (min)</label><input id="dret" type="number" min="0"></div>
-<div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div>
-<div><label>Arrival traffic (×)</label><input id="traffic" type="number" value="1.25" step="0.05" min="1"></div>
-<div><label>Return traffic (×)</label><input id="rtraffic" type="number" value="1.05" step="0.05" min="1"></div>
-</div>
+<div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div></div>
 <p class="hint" id="zhint"></p>
 </div>
 
@@ -99,19 +96,13 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 
 // Live ZIP lookups: tmr = pending debounce, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
-// live = {zip, mi, base} from the last successful lookup (base = free-flow minutes before traffic),
-// kept so the traffic factors can rescale times later; dropped once times come from anywhere else.
-var tmr,ctl,seq=0,live0=null;
-function cancelLookup(){clearTimeout(tmr);seq++;live0=null;if(ctl){ctl.abort();ctl=null}}
-function applyTraffic(){
- var mn=live0.base*(num("traffic")||1);
- $("drive").value=Math.round(mn);$("dret").value=Math.round(live0.base*(num("rtraffic")||1));$("trmin").value=Math.round(mn*1.6+20);
- $("zhint").textContent="Live route from ZIP "+live0.zip+": "+live0.mi.toFixed(1)+" road miles, "+Math.round(live0.base)+" min with no traffic. Drive times use the arrival and return traffic factors; transit time is a rough estimate (edit as needed).";
-}
+// The routing service returns no-traffic times; these fixed multipliers turn them into
+// a Saturday ~6 PM drive there and a ~11 PM drive home (both fields stay editable).
+var ARRIVE=1.25,RETURN=1.05;
+var tmr,ctl,seq=0;
+function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="zip")e.oninput=calc;e.onchange=e.onchange||calc});
-["traffic","rtraffic"].forEach(function(i){$(i).oninput=function(){if(live0)applyTraffic();calc()}});
-["drive","dret","trmin"].forEach(function(i){$(i).oninput=function(){live0=null;calc()}});
 
 $("zip").oninput=function(){
  var z=$("zip").value.trim();
@@ -132,10 +123,10 @@ function live(z){
   clearTimeout(to);
   if(id!==seq)return;
   if(!d.routes||!d.routes.length)throw new Error("route");
-  live0={zip:z,mi:d.routes[0].distance/1609.34,base:d.routes[0].duration/60};
+  var mi=d.routes[0].distance/1609.34,base=d.routes[0].duration/60;
   ctl=null;
-  $("miles").value=live0.mi.toFixed(1);
-  applyTraffic();
+  $("miles").value=mi.toFixed(1);$("drive").value=Math.round(base*ARRIVE);$("dret").value=Math.round(base*RETURN);$("trmin").value=Math.round(base*ARRIVE*1.6+20);
+  $("zhint").textContent="Live route from ZIP "+z+": "+mi.toFixed(1)+" road miles, "+Math.round(base)+" min with no traffic. Drive times include typical Saturday traffic; transit time is a rough estimate. Edit any of them as needed.";
   calc();
  })
  .catch(function(){
