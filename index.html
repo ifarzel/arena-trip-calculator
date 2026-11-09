@@ -21,6 +21,7 @@ input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-rad
 .addr{margin-bottom:12px}.addrrow{display:flex;gap:8px}
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 #zhint{white-space:pre-line}
+.evt{margin-bottom:6px}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
 /* ---------- results ---------- */
 .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
@@ -74,18 +75,24 @@ td.best .tot,td.best .per{color:var(--good)}
 <body>
 <main>
 <h1>🏟️ Arena Trip Calculator</h1>
-<p class="sub">Compare cost and time to get to and from Crypto.com Arena (1111 S Figueroa St) for a Saturday 7 PM event. Every number below is editable.</p>
+<p class="sub">Compare cost and time to get to and from Crypto.com Arena (1111 S Figueroa St) for your event. Every number below is editable.</p>
 
 <div class="card">
 <h2>Your trip</h2>
 <div class="addr"><label for="addr">Home address (or city / ZIP)</label>
 <div class="addrrow"><input id="addr" autocomplete="street-address" placeholder="e.g. 3333 Bristol St, Costa Mesa" autofocus><button id="go" type="button">Look up</button></div></div>
+<div class="grid evt">
+<div><label for="edate">Event date</label><input id="edate" type="date"></div>
+<div><label for="estart">Event start</label><input id="estart" type="time" value="19:00"></div>
+<div><label for="eend">Event end</label><input id="eend" type="time" value="22:30"></div>
+</div>
+<p class="hint" id="ehint" style="margin:0 0 12px"></p>
 <div class="grid">
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
-<div><label>Drive there, leave 5:45 PM (min)</label><input id="drive" type="number" min="0"></div>
-<div><label>Drive home, leave 10:30 PM (min)</label><input id="dret" type="number" min="0"></div>
-<div><label>Transit there, arrive 6:45 PM (min)</label><input id="trmin" type="number" min="0"></div>
-<div><label>Transit home, leave 10:30 PM (min)</label><input id="trret" type="number" min="0"></div></div>
+<div><label>Drive there (min)</label><input id="drive" type="number" min="0"></div>
+<div><label>Drive home (min)</label><input id="dret" type="number" min="0"></div>
+<div><label>Transit there (min)</label><input id="trmin" type="number" min="0"></div>
+<div><label>Transit home (min)</label><input id="trret" type="number" min="0"></div></div>
 <p class="hint" id="zhint"></p>
 </div>
 
@@ -134,15 +141,16 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 // Live address lookups: tmr = pending timer, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
 // Google Maps Platform does the geocoding (Maps JavaScript API) and all four routes (Routes API) for the
-// coming Saturday: driving with typical traffic leaving home 5:45 PM and leaving the arena 10:30 PM,
-// and transit arriving by 6:45 PM and leaving the arena at 10:30 PM. The key is restricted in Google
+// event date and times entered: driving with typical traffic (parked in time to be seated 15 min
+// before the start; home after the event ends), and transit arriving by the seat time and leaving at
+// the end. The key is restricted in Google
 // Cloud to this site's URLs and these two APIs; referrerPolicy sends the full page URL it checks.
 var GKEY="AIzaSyC6YF3owaP0CiuOfgjDsGA5igkAUOb2HFU";
 var ARENA=[-118.2673,34.0430],SOCAL=[-121.0,32.5,-114.0,35.8];
 // Fallbacks if Google fails: OSRM no-traffic time times rough multipliers; transit from drive time.
 var ARRIVE=1.25,RETURN=1.05;
 var RP="no-referrer-when-downgrade";
-function nextSat(){ // next Saturday whose 5:45 PM departure hasn't passed yet
+function nextSat(){ // default event date: the next Saturday (next week if it's Saturday evening already)
  var d=new Date(),add=(6-d.getDay()+7)%7;
  if(add===0&&d.getHours()*60+d.getMinutes()>=17*60+45)add=7;
  d.setDate(d.getDate()+add);return d;
@@ -154,6 +162,20 @@ function laDate(day,hh,mm){ // the instant it is hh:mm in Los Angeles on day's c
  return new Date(2*guess-Date.UTC(g.year,g.month-1,g.day,g.hour,g.minute));
 }
 function laClock(d){return d.toLocaleTimeString("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit"})}
+// Event timing from the inputs. Seated = 15 min before the start. An end time at or before the
+// start is taken to be after midnight.
+var SEAT_EARLY=15;
+function ymdLocal(d){return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)}
+function hm(v,def){var a=(v||def).split(":");return[+a[0],+a[1]]}
+function evt(){
+ var dv=$("edate").value||ymdLocal(nextSat()),p=dv.split("-"),day=new Date(+p[0],+p[1]-1,+p[2]),
+  s=hm($("estart").value,"19:00"),e=hm($("eend").value,"22:30"),
+  start=laDate(day,s[0],s[1]),end=laDate(day,e[0],e[1]);
+ if(end<=start){var d2=new Date(day);d2.setDate(d2.getDate()+1);end=laDate(d2,e[0],e[1])}
+ return{day:day,start:start,end:end,seat:new Date(+start-SEAT_EARLY*60000),
+  label:day.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})};
+}
+function evtText(E){return E.label+" · "+laClock(E.start)+" – "+laClock(E.end)+" event · seated by "+laClock(E.seat)}
 function inSoCal(lon,lat){return lon>=SOCAL[0]&&lat>=SOCAL[1]&&lon<=SOCAL[2]&&lat<=SOCAL[3]}
 function secs(s){return parseFloat(s)||0}
 function wp(ll){return{location:{latLng:{latitude:ll[1],longitude:ll[0]}}}}
@@ -195,19 +217,22 @@ function gRoute(body,mask,sig){
   headers:{"Content-Type":"application/json","X-Goog-Api-Key":GKEY,"X-Goog-FieldMask":mask},body:JSON.stringify(body)})
  .then(getJSON).then(function(d){if(!d.routes||!d.routes.length)throw new Error("noroute");return d.routes[0]});
 }
-function drives(home,tThere,tBack,sig){
+// Driving: Google can't route by arrival time, so estimate the drive with a first guess at the
+// departure time, then ask again leaving exactly that long before you need to be at the lot.
+function drives(home,atLot,tBack,sig){
  var m="routes.duration,routes.distanceMeters",o={travelMode:"DRIVE",routingPreference:"TRAFFIC_AWARE_OPTIMAL"};
+ function there(dep){return gRoute(Object.assign({origin:wp(home),destination:wp(ARENA),departureTime:dep.toISOString()},o),m,sig)}
  return Promise.all([
-  gRoute(Object.assign({origin:wp(home),destination:wp(ARENA),departureTime:tThere.toISOString()},o),m,sig),
+  there(new Date(+atLot-50*60000)).then(function(r1){return there(new Date(+atLot-secs(r1.duration)*1000))}),
   gRoute(Object.assign({origin:wp(ARENA),destination:wp(home),departureTime:tBack.toISOString()},o),m,sig)])
- .then(function(r){return{google:true,mi:r[0].distanceMeters/1609.34,there:secs(r[0].duration)/60,back:secs(r[1].duration)/60}})
+ .then(function(r){var th=secs(r[0].duration)/60;return{google:true,mi:r[0].distanceMeters/1609.34,there:th,back:secs(r[1].duration)/60,leave:new Date(+atLot-th*60000)}})
  .catch(function(e){
   if(sig.aborted)throw e;
   return fetch("https://router.project-osrm.org/route/v1/driving/"+home.join(",")+";"+ARENA.join(",")+"?overview=false",{signal:sig}).then(getJSON)
   .then(function(d){
    if(!d.routes||!d.routes.length)throw new Error("route");
    var b=d.routes[0].duration/60;
-   return{google:false,mi:d.routes[0].distance/1609.34,there:b*ARRIVE,back:b*RETURN,base:b};
+   return{google:false,mi:d.routes[0].distance/1609.34,there:b*ARRIVE,back:b*RETURN,base:b,leave:new Date(+atLot-b*ARRIVE*60000)};
   });
  });
 }
@@ -261,31 +286,42 @@ $("addr").oninput=function(){if($("addr").value.trim()!==lastQ)$("zhint").textCo
 $("addr").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();lookup()}};
 $("addr").onchange=function(){lookup()};
 $("go").onclick=function(){lookup(true)};
+// Changing the event date or times redoes the lookup for the same address.
+function evChanged(){
+ var E=evt();$("ehint").textContent="Planning to be seated by "+laClock(E.seat)+" (15 min before the start)"+".";
+ calc();clearTimeout(tmr);if(lastQ.length>=3){$("zhint").textContent="Updating routes for the new event time…";tmr=setTimeout(function(){lookup(true)},700)}
+}
+["edate","estart","eend"].forEach(function(i){$(i).oninput=evChanged;$(i).onchange=evChanged});
+$("edate").value=ymdLocal(nextSat());$("edate").min=ymdLocal(new Date());
+$("ehint").textContent="Planning to be seated by "+laClock(evt().seat)+" (15 min before the start).";
 function live(q){
- var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},15000),sat=nextSat(),place,
-  tThere=laDate(sat,17,45),tArrive=laDate(sat,18,45),tBack=laDate(sat,22,30);
+ var E=evt();
+ if(+E.seat-(num("twalk")+num("tpark")+60)*60000<Date.now()){$("zhint").textContent="That event time has already passed (or is too soon to plan a drive). Pick a future date and time.";return}
+ // car: at the lot early enough to park and walk in; home: start driving after walking back and exiting
+ var atLot=new Date(+E.seat-(num("twalk")+num("tpark"))*60000),carHome=new Date(+E.end+(num("twalk")+num("texit"))*60000);
+ var id=++seq,c=ctl=new AbortController(),to=setTimeout(function(){c.abort()},15000),place;
  geocode(q,c.signal)
  .then(function(g){
   place=g.label;
-  return Promise.all([drives(g.ll,tThere,tBack,c.signal),transits(g.ll,tArrive,tBack,c.signal)]);
+  return Promise.all([drives(g.ll,atLot,carHome,c.signal),transits(g.ll,E.seat,E.end,c.signal)]);
  })
  .then(function(r){
   clearTimeout(to);
   if(id!==seq)return;
   ctl=null;
-  var x=r[0],t=r[1],when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}),L=[];
+  var x=r[0],t=r[1],L=[];
   $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);
-  trip={place:place,when:when,late:t&&t.wait>60?{first:laClock(t.firstHome),home:laClock(t.homeAt)}:null};
+  trip={place:place,late:t&&t.wait>60?{first:laClock(t.firstHome),home:laClock(t.homeAt)}:null};
   L.push("Route from "+place+": "+x.mi.toFixed(1)+" road miles.");
   L.push(x.google
-   ?"Driving ("+when+", typical traffic): "+Math.round(x.there)+" min leaving home at 5:45 PM; "+Math.round(x.back)+" min home leaving the arena at 10:30 PM."
+   ?"Driving ("+E.label+", typical traffic): leave home by "+laClock(x.leave)+" ("+Math.round(x.there)+" min) to park by "+laClock(atLot)+"; "+Math.round(x.back)+" min home, pulling out at "+laClock(carHome)+"."
    :"Driving: traffic data was unavailable, so times are rough estimates ("+Math.round(x.base)+" min with no traffic, ×"+ARRIVE+" there, ×"+RETURN+" home).");
   if(t){
    $("trmin").value=Math.round(t.there);$("trret").value=Math.round(t.back);
    tsplit={ride:t.ride,walk:t.walk};
-   L.push("Transit there: leave by "+laClock(t.leave)+" to arrive by 6:45 PM"+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
-   L.push((t.wait>60?"⚠️ No late transit home: the next trip after 10:30 PM leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
-    :"Transit home: leave the arena 10:30 PM"+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
+   L.push("Transit there: leave by "+laClock(t.leave)+" to be seated by "+laClock(E.seat)+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
+   L.push((t.wait>60?"⚠️ No late transit home: the next trip after "+laClock(E.end)+" leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
+    :"Transit home: leave the arena at "+laClock(E.end)+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
   }else{
    $("trmin").value=Math.round(x.there*1.6+20);$("trret").value=Math.round(x.there*1.6+20);
    tsplit=null;
@@ -305,7 +341,7 @@ function live(q){
   clearTimeout(to);
   if(id!==seq)return;
   ctl=null;
-  $("zhint").textContent="Couldn’t find a route for that address. Check the spelling (only Southern California addresses are supported), or enter miles and minutes manually (try Google Maps for a Saturday 5:45 PM departure).";
+  $("zhint").textContent="Couldn’t find a route for that address. Check the spelling (only Southern California addresses are supported), or enter miles and minutes manually (try Google Maps with your departure time).";
  });
 }
 
@@ -348,7 +384,7 @@ function calc(){
 
  // header
  h+='<div class="card rhead"><div><p class="eyebrow">✓ Event cost &amp; time breakdown</p><h2>Your Crypto.com Arena trip</h2><p class="meta">'+
-  (trip?"From "+esc(trip.place)+" · "+esc(trip.when):"Custom trip")+' · 7 PM event, heading home ~10:30 PM</p></div>'+
+  (trip?"From "+esc(trip.place):"Custom trip")+" · "+esc(evtText(evt()))+'</p></div>'+
   '<button class="ghost" type="button" id="edit">✎ Edit trip</button></div>';
 
  // mode cards
