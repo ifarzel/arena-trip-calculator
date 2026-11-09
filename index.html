@@ -59,6 +59,12 @@ td.best .tot,td.best .per{color:var(--good)}
 .party{font-weight:700;white-space:nowrap}.party small{display:block;font-weight:400;color:var(--mut);font-size:.75rem}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:6px}
 .bv{display:inline-block;border:1px solid var(--good);background:color-mix(in srgb,var(--good) 10%,transparent);color:var(--good);border-radius:8px;padding:4px 10px;font-size:.82rem;font-weight:700;white-space:nowrap}
+.brk{list-style:none;margin:2px 0 0;padding:0;font-size:.82rem}
+.brk li{display:flex;justify-content:space-between;gap:8px;padding:2px 0;color:var(--mut)}
+.brk li span:last-child{color:var(--ink);font-variant-numeric:tabular-nums}
+.grp div{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:1px 0}
+.grp div span:last-child{font-variant-numeric:tabular-nums}
+.grp .best,.grp .best b{color:var(--good)}
 .ins{margin:0;padding:0;list-style:none}
 .ins li{padding:10px 0 10px 14px;border-left:3px solid var(--acc);margin-bottom:10px;background:color-mix(in srgb,var(--acc) 5%,transparent);border-radius:0 8px 8px 0;padding-right:12px}
 .ins li.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
@@ -314,10 +320,13 @@ function model(n){
  var car=fuel+num("park");
  var manual=$("fare").value!=="";
  var inb=manual?num("fare"):3+1.85*mi+0.4*d, ret=manual?num("fare"):3+1.85*mi+0.4*dr;
- var ride=(inb+ret*num("surge"))*(1+num("tip")/100);
+ var retS=ret*num("surge"),tipAmt=(inb+retS)*num("tip")/100,ride=inb+retS+tipAmt;
  var tr=num("tfare")*n+num("spark");
  var cw=num("tpark")+num("texit"),cwk=num("twalk")*2,rw=num("rwait1")+num("rwait2"),rwk=num("rwalk")*2;
  return{car:car,ride:ride,tr:tr,fuel:fuel,
+  parts:{car:[[$("pt").value==="ev"?"Charging":"Gas",fuel],["Arena parking",num("park")]],
+   ride:[["Fare there",inb],["Fare home (×"+num("surge")+" surge)",retS],["Tip ("+num("tip")+"%)",tipAmt]],
+   tr:[["Fares ("+n+" × "+money(num("tfare"))+" round trip)",num("tfare")*n],["Station parking",num("spark")]]},
   time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:tt},
   fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:trSplit(tt)}};
 }
@@ -362,18 +371,18 @@ function calc(){
  });
  h+='</div><div class="leg"><span><i style="background:var(--car)"></i>Moving (mode color)</span><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:color-mix(in srgb,var(--mut) 40%,var(--line))"></i>Walking</span></div>';
 
- // cost table
- h+='<div class="card"><div class="chead"><div><h2>💲 Out-of-pocket cost by party size</h2><p>Total for the group, and per person when you split the car or the ride.</p></div>'+
-  '<span class="chip">'+(ev?"Charging":"Gas")+': '+money(M.fuel)+' · Parking: '+money(num("park"))+'</span></div>';
- h+='<div class="scroll"><table><tr><th>Party size</th><th style="color:var(--car)">Personal car</th><th style="color:var(--ride)">Rideshare (×'+surge+' surge home)</th><th style="color:var(--tr)">Public transit</th><th>Best value</th></tr>';
- var tags=["Solo","Splitting the vehicle","Full group split"];
- N.forEach(function(n,i){
-  var b=minOf(function(x){return pp(x,i)});
-  h+='<tr><td class="party"><span class="dot" style="opacity:'+(.45+i*.27)+'"></span>'+n+' rider'+(n>1?'s':'')+'<small>'+tags[i]+'</small></td>'+
-   k.map(function(x){return '<td class="'+(x===b?'best':'')+'"><div class="tot">'+money(m[i][x])+'</div><div class="per">'+money(pp(x,i))+' / rider</div></td>'}).join("")+
-   '<td><span class="bv">'+icon[b]+' '+(b==="tr"?"Transit":b==="ride"?"Rideshare":"Car")+' ('+money(pp(b,i))+')</span></td></tr>';
+ // cost cards: solo total big, breakdown, then group totals and per-rider
+ var cheap=[0,1,2].map(function(i){return minOf(function(x){return pp(x,i)})});
+ h+='<p class="label">💲 Round-trip cost</p><div class="modes">';
+ k.forEach(function(x){
+  h+='<div class="card mode'+(x===cheap[0]?' win':'')+'"><div class="mtop"><span style="color:'+col[x]+'">'+icon[x]+' '+names[x]+'</span>'+
+   (x===cheap[0]?'<span class="pill good">Cheapest solo</span>':x===cheap[2]?'<span class="pill good">Best for 3</span>':'')+'</div>'+
+   '<div class="big">'+money(m[0][x])+'</div><div class="comp">solo, round trip</div>'+
+   '<ul class="brk">'+m[0].parts[x].map(function(p){return '<li><span>'+p[0]+'</span><span>'+money(p[1])+'</span></li>'}).join("")+'</ul>'+
+   '<div class="mfoot grp">'+[1,2].map(function(i){var b=x===cheap[i];
+    return '<div'+(b?' class="best"':'')+'><span>'+N[i]+' riders</span><span>'+money(m[i][x])+' total · <b>'+money(pp(x,i))+'</b> each</span></div>'}).join("")+'</div></div>';
  });
- h+='</table></div></div>';
+ h+='</div><p class="hint" style="margin:-8px 0 16px">Car and rideshare costs are per vehicle and split between riders; transit fares are per rider, with one shared station parking fee. Green = cheapest per person for that group size.</p>';
 
  // insights
  var I=[],r0=m[0];
