@@ -27,6 +27,11 @@ button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#
 .asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
 .asec .hint{margin-bottom:0}
+.togs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+.tog{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--ink);font-size:.88rem;margin:0}
+.tog input{width:18px;height:18px;margin:1px 0 0;flex:none;accent-color:var(--tr)}
+.tog small{display:block;color:var(--mut);font-size:.78rem;margin-top:2px}
+.tog small b{color:var(--ink)}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
 /* ---------- results ---------- */
 .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
@@ -96,8 +101,8 @@ td.best .tot,td.best .per{color:var(--good)}
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
 <div><label>Drive there (min)</label><input id="drive" type="number" min="0"></div>
 <div><label>Drive home (min)</label><input id="dret" type="number" min="0"></div>
-<div><label>Transit there (min)</label><input id="trmin" type="number" min="0"></div>
-<div><label>Transit home (min)</label><input id="trret" type="number" min="0"></div></div>
+<div><label>Transit there, travel only (min)</label><input id="trmin" type="number" min="0"></div>
+<div><label>Transit home, travel only (min)</label><input id="trret" type="number" min="0"></div></div>
 <p class="hint" id="zhint"></p>
 </div>
 
@@ -141,6 +146,10 @@ td.best .tot,td.best .per{color:var(--good)}
 <div><label for="spark">Station parking ($)</label><input id="spark" type="number" value="0" step="0.5"></div>
 <div><label for="tbuf">Buffer at first stop, there (min)</label><input id="tbuf" type="number" value="5" min="0"></div>
 <div><label for="tcrowd">Post-event crowd delay, home (min)</label><input id="tcrowd" type="number" value="10" min="0"></div>
+</div>
+<div class="togs">
+<label class="tog"><input type="checkbox" id="tearly" checked><span><b>Count arriving early as waiting</b><small id="tearlyN">Time at the arena between the transit trip arriving and your seat time.</small></span></label>
+<label class="tog"><input type="checkbox" id="tfirst" checked><span><b>Count the wait for the first ride home</b><small id="tfirstN">Time after the event ends until the first bus or train you can catch.</small></span></label>
 </div>
 <p class="hint">The fare is filled in from Google when it has one. Add station parking if you drive to a park-and-ride; it’s shared by the group.</p>
 </section>
@@ -278,8 +287,8 @@ function transits(home,tArrive,tBack,sig){
   gRoute({origin:wp(ARENA),destination:wp(home),travelMode:"TRANSIT",departureTime:tBack.toISOString()},m,sig)])
  .then(function(r){
   var a=transitInfo(r[0],new Date(tArrive-secs(r[0].duration)*1000)),b=transitInfo(r[1],tBack),home=new Date(+b.start+b.dur*1000);
-  return{there:(tArrive-a.start)/60000,leave:a.start,linesThere:a.lines,
-   back:(home-tBack)/60000,wait:(b.start-tBack)/60000,firstHome:b.start,homeAt:home,linesBack:b.lines,
+  return{there:a.dur/60,early:Math.max(0,(tArrive-a.start)/60000-a.dur/60),leave:a.start,linesThere:a.lines,
+   back:b.dur/60,wait:(b.start-tBack)/60000,firstWait:Math.max(0,(b.start-tBack)/60000),firstHome:b.start,homeAt:home,linesBack:b.lines,
    ride:a.ride+b.ride,walk:a.walk+b.walk,fareThere:a.fare,fareBack:b.fare};
  })
  .catch(function(e){if(sig.aborted)throw e;return null});
@@ -287,7 +296,8 @@ function transits(home,tArrive,tBack,sig){
 
 // tsplit = riding/walking minutes from the last transit lookup, so the time bars can show the
 // real split (waiting = whatever is left of the transit total). null = use the rough 70/15/15.
-var tmr,ctl,seq=0,lastQ="",tsplit=null,trip=null; // trip = {place, when, late} from the last lookup, for the results header
+var tmr,ctl,seq=0,lastQ="",tsplit=null,trip=null,twaits=null;
+// trip = {place, late} for the results header; twaits = {early, firstWait} minutes from the last transit lookup
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="addr")e.oninput=calc;e.onchange=e.onchange||calc});
@@ -337,13 +347,13 @@ function live(q){
    :"Driving: traffic data was unavailable, so times are rough estimates ("+Math.round(x.base)+" min with no traffic, ×"+ARRIVE+" there, ×"+RETURN+" home).");
   if(t){
    $("trmin").value=Math.round(t.there);$("trret").value=Math.round(t.back);
-   tsplit={ride:t.ride,walk:t.walk};
+   tsplit={ride:t.ride,walk:t.walk};twaits={early:t.early,firstWait:t.firstWait};
    L.push("Transit there: leave by "+laClock(new Date(+t.leave-num("tbuf")*60000))+" (with a "+num("tbuf")+"-min buffer at the first stop) to be seated by "+laClock(E.seat)+(t.linesThere.length?" ("+t.linesThere.join(" → ")+")":"")+".");
    L.push((t.wait>60?"⚠️ No late transit home: the next trip after "+laClock(E.end)+" leaves at "+laClock(t.firstHome)+", arriving around "+laClock(t.homeAt)+"."
     :"Transit home: leave the arena at "+laClock(E.end)+(t.wait>5?", first ride at "+laClock(t.firstHome):"")+", home around "+laClock(t.homeAt))+(t.linesBack.length?" ("+t.linesBack.join(" → ")+")":"")+".");
   }else{
    $("trmin").value=Math.round(x.there*1.6+20);$("trret").value=Math.round(x.there*1.6+20);
-   tsplit=null;
+   tsplit=null;twaits=null;
    L.push("Transit: schedules were unavailable, so transit times are rough estimates.");
   }
   if(t&&(t.fareThere!=null||t.fareBack!=null)){
@@ -370,7 +380,7 @@ function trSplit(tt,extra){ // [riding, waiting, walking] minutes for the transi
  r*=sc;w*=sc;return[r,tt-r-w+extra,w];
 }
 function model(n){
- var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tx=num("tbuf")+num("tcrowd"),tt=t+tb+tx,rt=mi*2,fuel;
+ var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),tb=num("trret"),tw=twaits||{early:0,firstWait:0},tx=num("tbuf")+num("tcrowd")+($("tearly").checked?tw.early:0)+($("tfirst").checked?tw.firstWait:0),tt=t+tb+tx,rt=mi*2,fuel;
  if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
  var car=fuel+num("park");
  var manual=$("fare").value!=="";
@@ -388,7 +398,13 @@ function model(n){
 
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function mins(m){return Math.round(m)+" min"}
+function waitNotes(){
+ var e="Time at the arena between the transit trip arriving and your seat time.",f="Time after the event ends until the first bus or train you can catch.";
+ $("tearlyN").innerHTML=twaits?"<b>"+Math.round(twaits.early)+" min</b> for this trip. "+e:e+" Look up an address to calculate it.";
+ $("tfirstN").innerHTML=twaits?"<b>"+(twaits.firstWait<60?Math.round(twaits.firstWait)+" min":dur(twaits.firstWait))+"</b> for this trip. "+f:f+" Look up an address to calculate it.";
+}
 function calc(){
+ waitNotes();
  if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")&&!num("trret")){
   $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
@@ -457,7 +473,7 @@ function calc(){
   (order[0]!=="car"?'Driving loses '+mins(f.car[1]+f.car[2])+' to parking, exiting and walking.':'Parking and walking still cost '+mins(f.car[1]+f.car[2])+' of that trip.'));
  var late=trip&&trip.late?'<li class="warn"><b>⚠️ Late-night transit gap:</b> after the event the next transit trip home leaves at <b>'+trip.late.first+'</b>, arriving around '+trip.late.home+'. Plan on a ride home if you take transit there.</li>':'';
  h+='<div class="card"><h2>💡 Trade-offs &amp; break-even</h2><ul class="ins">'+late+I.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>';
- h+='<p class="hint">Assumptions (edit them above): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
+ h+='<p class="hint">Assumptions (edit them above): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(twaits?', '+($("tearly").checked?'counts':'leaves out')+' '+Math.round(twaits.early)+' min of arriving early and '+($("tfirst").checked?'counts':'leaves out')+' '+(twaits.firstWait<60?Math.round(twaits.firstWait)+' min':dur(twaits.firstWait))+' waiting for the first ride home':'')+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
  $("edit").onclick=function(){window.scrollTo({top:0,behavior:"smooth"});$("addr").focus({preventScroll:true})};
 }
