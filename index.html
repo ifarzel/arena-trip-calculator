@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Arena Trip Calculator: Crypto.com Arena</title>
 <style>
-:root{--bg:#f6f7fb;--card:#fff;--ink:#14161f;--mut:#5d6477;--line:#e3e6ef;--acc:#5b4bdb;--car:#e8833a;--ride:#2a9d8f;--tr:#3a6fe8;--good:#1b8a4b}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a}}
-:root[data-theme="dark"]{--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a}
+:root{--bg:#f6f7fb;--card:#fff;--ink:#14161f;--mut:#5d6477;--line:#e3e6ef;--acc:#5b4bdb;--car:#d9702a;--ride:#1f8f82;--tr:#3a6fe8;--good:#1b8a4b;--warn:#b7791f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a;--car:#f0a05a;--ride:#45c7b8;--tr:#7aa2ff;--warn:#f2b84b}}
+:root[data-theme="dark"]{--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a;--car:#f0a05a;--ride:#45c7b8;--tr:#7aa2ff;--warn:#f2b84b}
 html{scroll-padding-top:env(safe-area-inset-top,0px);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -22,21 +22,47 @@ input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-rad
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 #zhint{white-space:pre-line}
 .hint{font-size:.8rem;color:var(--mut);margin-top:8px}
-.badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.badge{background:var(--acc);color:#fff;border-radius:999px;padding:4px 12px;font-size:.82rem;font-weight:600}
-.scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:520px}
-th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th:first-child,td:first-child{text-align:left}
-th{font-size:.8rem;color:var(--mut);font-weight:600}
-.best{color:var(--good);font-weight:700}
-.sec td{background:var(--bg);font-weight:700;text-align:left;font-size:.8rem;color:var(--mut)}
-.insight{border-left:4px solid var(--acc);padding:4px 12px;margin:0}
-.bar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:4px 0 2px}
+/* ---------- results ---------- */
+.eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
+.rhead{background:linear-gradient(135deg,color-mix(in srgb,var(--acc) 16%,var(--card)),var(--card) 70%);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.rhead h2{font-size:1.45rem;margin:0 0 4px;line-height:1.2}
+.rhead .meta{color:var(--mut);font-size:.88rem;margin:0}
+.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.ghost:hover{border-color:var(--acc)}
+.label{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:20px 0 8px}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
+.mode{margin:0;display:flex;flex-direction:column;gap:6px}
+.mode.win{border-color:var(--good);box-shadow:0 0 0 1px var(--good) inset}
+.mtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;font-size:.92rem}
+.pill{border-radius:999px;padding:2px 10px;font-size:.74rem;font-weight:700;white-space:nowrap}
+.pill.good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.big{font-size:1.9rem;font-weight:800;line-height:1.1;letter-spacing:-.01em}
+.comp{font-size:.8rem;color:var(--mut)}
+.bar{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--line);margin:2px 0}
 .bar span{display:block}
-.row{margin-bottom:14px}.row b{font-size:.9rem}
-.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--mut);margin-top:4px}
-.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.mfoot{border-top:1px solid var(--line);padding-top:8px;margin-top:auto;font-size:.8rem;color:var(--mut)}
+.mfoot b{font-weight:700}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--mut);margin:-6px 0 16px}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.chead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.chead h2{margin:0}.chead p{margin:2px 0 0;font-size:.82rem;color:var(--mut)}
+.chip{border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:.8rem;color:var(--mut);white-space:nowrap}
+.scroll{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{padding:10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+th{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--mut)}
+td .tot{font-weight:700;font-size:1rem}
+td .per{font-size:.8rem;color:var(--mut)}
+td.best .tot,td.best .per{color:var(--good)}
+.party{font-weight:700;white-space:nowrap}.party small{display:block;font-weight:400;color:var(--mut);font-size:.75rem}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:6px}
+.bv{display:inline-block;border:1px solid var(--good);background:color-mix(in srgb,var(--good) 10%,transparent);color:var(--good);border-radius:8px;padding:4px 10px;font-size:.82rem;font-weight:700;white-space:nowrap}
+.ins{margin:0;padding:0;list-style:none}
+.ins li{padding:10px 0 10px 14px;border-left:3px solid var(--acc);margin-bottom:10px;background:color-mix(in srgb,var(--acc) 5%,transparent);border-radius:0 8px 8px 0;padding-right:12px}
+.ins li.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
+.ins b{font-weight:700}
 </style>
 </head>
 <body>
@@ -211,7 +237,7 @@ function transits(home,tArrive,tBack,sig){
 
 // tsplit = riding/walking minutes from the last transit lookup, so the time bars can show the
 // real split (waiting = whatever is left of the transit total). null = use the rough 70/15/15.
-var tmr,ctl,seq=0,lastQ="",tsplit=null;
+var tmr,ctl,seq=0,lastQ="",tsplit=null,trip=null; // trip = {place, when, late} from the last lookup, for the results header
 function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="addr")e.oninput=calc;e.onchange=e.onchange||calc});
@@ -243,6 +269,7 @@ function live(q){
   ctl=null;
   var x=r[0],t=r[1],when=sat.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}),L=[];
   $("miles").value=x.mi.toFixed(1);$("drive").value=Math.round(x.there);$("dret").value=Math.round(x.back);
+  trip={place:place,when:when,late:t&&t.wait>60?{first:laClock(t.firstHome),home:laClock(t.homeAt)}:null};
   L.push("Route from "+place+": "+x.mi.toFixed(1)+" road miles.");
   L.push(x.google
    ?"Driving ("+when+", typical traffic): "+Math.round(x.there)+" min leaving home at 5:45 PM; "+Math.round(x.back)+" min home leaving the arena at 10:30 PM."
@@ -295,43 +322,80 @@ function model(n){
   fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:trSplit(tt)}};
 }
 
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function mins(m){return Math.round(m)+" min"}
 function calc(){
  if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")&&!num("trret")){
   $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
  }
- var N=[1,2,3],m=N.map(model),M=m[0],names={car:"Personal car",ride:"Rideshare",tr:"Public transit"},col={car:"var(--car)",ride:"var(--ride)",tr:"var(--tr)"},k=["car","ride","tr"];
- function pp(mode,i){return m[i][mode]/N[i]}
+ var N=[1,2,3],m=N.map(model),M=m[0],k=["car","ride","tr"],
+  names={car:"Personal car",ride:"Rideshare",tr:"Public transit"},icon={car:"🚗",ride:"🚕",tr:"🚆"},
+  col={car:"var(--car)",ride:"var(--ride)",tr:"var(--tr)"};
+ function pp(x,i){return m[i][x]/N[i]}
  function minOf(f){var b=k[0];k.forEach(function(x){if(f(x)<f(b))b=x});return b}
- var fast=minOf(function(x){return M.time[x]}),solo=minOf(function(x){return pp(x,0)}),grp=minOf(function(x){return pp(x,2)});
- var h='<div class="card"><h2>Results</h2><div class="badges"><span class="badge">⚡ Fastest overall: '+names[fast]+'</span><span class="badge">💵 Lowest cost (solo): '+names[solo]+'</span><span class="badge">👥 Best group value: '+names[grp]+'</span></div>';
- h+='<div class="scroll"><table><tr><th></th><th>Riders</th>'+k.map(function(x){return '<th>'+names[x]+'</th>'}).join("")+'</tr>';
- h+='<tr class="sec"><td colspan="5">Total group cost</td></tr>';
- N.forEach(function(n,i){var b=minOf(function(x){return m[i][x]});h+='<tr><td></td><td>'+n+'</td>'+k.map(function(x){return '<td class="'+(x===b?'best':'')+'">'+money(m[i][x])+'</td>'}).join("")+'</tr>'});
- h+='<tr class="sec"><td colspan="5">Cost per person</td></tr>';
- N.forEach(function(n,i){var b=minOf(function(x){return pp(x,i)});h+='<tr><td></td><td>'+n+'</td>'+k.map(function(x){return '<td class="'+(x===b?'best':'')+'">'+money(pp(x,i))+'</td>'}).join("")+'</tr>'});
- h+='<tr class="sec"><td colspan="5">Round-trip time</td></tr><tr><td></td><td>any</td>'+k.map(function(x){return '<td class="'+(x===fast?'best':'')+'">'+dur(M.time[x])+'</td>'}).join("")+'</tr></table></div></div>';
+ var fast=minOf(function(x){return M.time[x]}),
+  ev=$("pt").value==="ev",surge=num("surge"),tf=num("tfare"),sp=num("spark"),h="";
 
- // tipping point
- var tf=num("tfare"),sp=num("spark"),msg=[];
- ["car","ride"].forEach(function(x){
-  var c=m[0][x],need=null;
-  for(var n=1;n<=6;n++){if(c/n<=tf+sp/n){need=n;break}}
-  if(need===null)msg.push(names[x]+" doesn’t beat transit per person even with 6 riders.");
-  else if(need===1)msg.push(names[x]+" is already cheaper than transit even solo.");
-  else msg.push(names[x]+" ("+money(c)+" per vehicle) matches transit’s per-person cost at <b>"+need+" riders</b> ("+money(c/need)+" vs "+money(tf+sp/need)+")"+(need>3?" (a typical car holds 4–5, so this is a tight squeeze).":"."));
+ // header
+ h+='<div class="card rhead"><div><p class="eyebrow">✓ Event cost &amp; time breakdown</p><h2>Your Crypto.com Arena trip</h2><p class="meta">'+
+  (trip?"From "+esc(trip.place)+" · "+esc(trip.when):"Custom trip")+' · 7 PM event, heading home ~10:30 PM</p></div>'+
+  '<button class="ghost" type="button" id="edit">✎ Edit trip</button></div>';
+
+ // mode cards
+ var f=M.fr,parts={
+  car:mins(f.car[0])+" driving + "+mins(f.car[1])+" parking &amp; exit + "+mins(f.car[2])+" walking",
+  ride:mins(f.ride[0])+" riding + "+mins(f.ride[1])+" waiting + "+mins(f.ride[2])+" walking",
+  tr:mins(f.tr[0])+" on board + "+mins(f.tr[1])+" waiting + "+mins(f.tr[2])+" walking"},
+ foot={
+  car:'<b style="color:var(--car)">'+mins(f.car[1]+f.car[2])+'</b> parking, exit &amp; walking',
+  ride:'<b style="color:var(--ride)">'+mins(f.ride[1]+f.ride[2])+'</b> pickup waits &amp; walks · ×'+surge+' surge home',
+  tr:trip&&trip.late?'<b style="color:var(--warn)">⚠️ No ride home until '+trip.late.first+'</b>':'<b style="color:var(--tr)">No parking or surge</b>'+(tsplit?' · '+mins(f.tr[1])+' waiting':'')};
+ h+='<p class="label">⏱ Round-trip door-to-seat time</p><div class="modes">';
+ k.forEach(function(x){
+  var tot=M.time[x]||1,fx=M.fr[x];
+  h+='<div class="card mode'+(x===fast?' win':'')+'"><div class="mtop"><span style="color:'+col[x]+'">'+icon[x]+' '+names[x]+'</span>'+
+   (x===fast?'<span class="pill good">Fastest</span>':x==="tr"&&trip&&trip.late?'<span class="pill warn">Late gap</span>':'')+'</div>'+
+   '<div class="big">'+dur(M.time[x])+'</div><div class="comp">'+parts[x]+'</div>'+
+   '<div class="bar" role="img" aria-label="'+names[x]+' time split"><span style="background:'+col[x]+';width:'+(fx[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(fx[1]/tot*100)+'%"></span><span style="background:color-mix(in srgb,var(--mut) 40%,var(--line));width:'+(fx[2]/tot*100)+'%"></span></div>'+
+   '<div class="mfoot">'+foot[x]+'</div></div>';
  });
- h+='<div class="card"><h2>Tipping point: when does splitting beat transit?</h2><p class="insight">'+msg.join("<br>")+'</p></div>';
+ h+='</div><div class="leg"><span><i style="background:var(--car)"></i>Moving (mode color)</span><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:color-mix(in srgb,var(--mut) 40%,var(--line))"></i>Walking</span></div>';
 
- // friction
- h+='<div class="card"><h2>Where your time goes (round trip)</h2>';
- var mx=Math.max.apply(null,k.map(function(x){return M.time[x]}))||1;
- k.forEach(function(x){var f=M.fr[x],tot=M.time[x]||1;
-  h+='<div class="row"><b>'+names[x]+'</b> · '+dur(tot)+'<div class="bar" style="width:'+(tot/mx*100)+'%">'+
-  '<span style="background:'+col[x]+';width:'+(f[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(f[1]/tot*100)+'%"></span><span style="background:var(--line);width:'+(f[2]/tot*100)+'%"></span></div></div>'});
- h+='<div class="leg"><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:var(--line);border:1px solid var(--mut)"></i>Walking</span><span><i style="background:var(--car)"></i>Moving (color = mode)</span></div>';
- h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; driving is the trip there plus the (usually faster) late-evening trip home; '+(tsplit?'transit riding and walking come from Google’s schedule, and waiting is the rest (transfers and waiting for the first ride home).':'transit time is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
+ // cost table
+ h+='<div class="card"><div class="chead"><div><h2>💲 Out-of-pocket cost by party size</h2><p>Total for the group, and per person when you split the car or the ride.</p></div>'+
+  '<span class="chip">'+(ev?"Charging":"Gas")+': '+money(M.fuel)+' · Parking: '+money(num("park"))+'</span></div>';
+ h+='<div class="scroll"><table><tr><th>Party size</th><th style="color:var(--car)">Personal car</th><th style="color:var(--ride)">Rideshare (×'+surge+' surge home)</th><th style="color:var(--tr)">Public transit</th><th>Best value</th></tr>';
+ var tags=["Solo","Splitting the vehicle","Full group split"];
+ N.forEach(function(n,i){
+  var b=minOf(function(x){return pp(x,i)});
+  h+='<tr><td class="party"><span class="dot" style="opacity:'+(.45+i*.27)+'"></span>'+n+' rider'+(n>1?'s':'')+'<small>'+tags[i]+'</small></td>'+
+   k.map(function(x){return '<td class="'+(x===b?'best':'')+'"><div class="tot">'+money(m[i][x])+'</div><div class="per">'+money(pp(x,i))+' / rider</div></td>'}).join("")+
+   '<td><span class="bv">'+icon[b]+' '+(b==="tr"?"Transit":b==="ride"?"Rideshare":"Car")+' ('+money(pp(b,i))+')</span></td></tr>';
+ });
+ h+='</table></div></div>';
+
+ // insights
+ var I=[],r0=m[0];
+ var mi=num("miles"),manual=$("fare").value!=="",ret=manual?num("fare"):3+1.85*mi+0.4*num("dret"),tip=1+num("tip")/100;
+ var surgeCost=ret*(surge-1)*tip;
+ I.push('<b>Post-event surge:</b> with thousands of fans leaving at once, the ×'+surge+' surge adds about <b>'+money(surgeCost)+'</b> to the ride home, putting rideshare at <b>'+money(r0.ride)+'</b> round trip.');
+ var cheapSolo=minOf(function(x){return pp(x,0)});
+ if(cheapSolo==="tr")I.push('<b>Solo vs. group:</b> going alone, transit saves <b>'+money(r0.car-r0.tr)+'</b> over driving and <b>'+money(r0.ride-r0.tr)+'</b> over rideshare. With 3 people the car drops to <b>'+money(pp("car",2))+'</b> each'+(pp("car",2)<=pp("tr",2)?', which beats transit.':', still more than transit’s '+money(pp("tr",2))+'.'));
+ else I.push('<b>Solo vs. group:</b> going alone, '+names[cheapSolo].toLowerCase()+' is cheapest at <b>'+money(pp(cheapSolo,0))+'</b>. With 3 people the car drops to <b>'+money(pp("car",2))+'</b> each.');
+ ["car","ride"].forEach(function(x){
+  var c=r0[x],need=null;for(var n=1;n<=6;n++){if(c/n<=tf+sp/n){need=n;break}}
+  if(need>1)I.push('<b>Break-even:</b> '+names[x].toLowerCase()+' ('+money(c)+' per vehicle) matches transit per person at <b>'+need+' riders</b>'+(need>3?' (a tight squeeze in most cars).':'.'));
+  else if(need===null&&x==="car")I.push('<b>Break-even:</b> even with 6 people sharing, the car costs more per person than transit.');
+ });
+ var order=k.slice().sort(function(a,b){return M.time[a]-M.time[b]}),gap=M.time[order[1]]-M.time[order[0]];
+ I.push('<b>Speed:</b> '+names[order[0]].toLowerCase()+' is fastest door to seat, <b>'+mins(gap)+'</b> ahead of '+names[order[1]].toLowerCase()+'. '+
+  (order[0]!=="car"?'Driving loses '+mins(f.car[1]+f.car[2])+' to parking, exiting and walking.':'Parking and walking still cost '+mins(f.car[1]+f.car[2])+' of that trip.'));
+ var late=trip&&trip.late?'<li class="warn"><b>⚠️ Late-night transit gap:</b> after the event the next transit trip home leaves at <b>'+trip.late.first+'</b>, arriving around '+trip.late.home+'. Plan on a ride home if you take transit there.</li>':'';
+ h+='<div class="card"><h2>💡 Trade-offs &amp; break-even</h2><ul class="ins">'+late+I.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>';
+ h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; '+(tsplit?'transit riding and walking come from Google’s schedule, and waiting is the rest.':'transit time is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
+ $("edit").onclick=function(){window.scrollTo({top:0,behavior:"smooth"});$("addr").focus({preventScroll:true})};
 }
 calc();
 })();
