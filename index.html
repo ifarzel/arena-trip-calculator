@@ -90,12 +90,21 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 function fill(p){$("miles").value=p[2];$("drive").value=p[3];$("trmin").value=p[4];$("zip").value=p[1]}
 // Live ZIP lookups: tmr = pending debounce, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
-var tmr,ctl,seq=0;
-function cancelLookup(){clearTimeout(tmr);seq++;if(ctl){ctl.abort();ctl=null}}
+// live = {zip, mi, base} from the last successful lookup (base = free-flow minutes before traffic),
+// kept so the traffic factor can rescale times later; dropped once times come from anywhere else.
+var tmr,ctl,seq=0,live0=null;
+function cancelLookup(){clearTimeout(tmr);seq++;live0=null;if(ctl){ctl.abort();ctl=null}}
+function applyTraffic(){
+ var mn=live0.base*(num("traffic")||1);
+ $("drive").value=Math.round(mn);$("trmin").value=Math.round(mn*1.6+20);
+ $("zhint").textContent="Live route from ZIP "+live0.zip+": "+live0.mi.toFixed(1)+" road miles. Drive time includes the traffic factor above; transit time is a rough estimate (edit as needed).";
+}
 function usePreset(i){sel.value=i;fill(P[i]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[i][0]+".";calc()}
 sel.onchange=function(){cancelLookup();if(sel.value!=="")usePreset(+sel.value);else{$("zhint").textContent="";calc()}};
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="zip"&&e.id!=="preset")e.oninput=calc;e.onchange=e.onchange||calc});
+$("traffic").oninput=function(){if(live0)applyTraffic();calc()};
+["drive","trmin"].forEach(function(i){$(i).oninput=function(){live0=null;calc()}});
 
 $("zip").oninput=function(){
  var z=$("zip").value.trim();
@@ -118,10 +127,10 @@ function live(z){
   clearTimeout(to);
   if(id!==seq)return;
   if(!d.routes||!d.routes.length)throw new Error("route");
-  var mi=d.routes[0].distance/1609.34,mn=d.routes[0].duration/60*(num("traffic")||1);
-  sel.value="";
-  $("miles").value=mi.toFixed(1);$("drive").value=Math.round(mn);$("trmin").value=Math.round(mn*1.6+20);
-  $("zhint").textContent="Live route from ZIP "+z+": "+mi.toFixed(1)+" road miles. Drive time includes the traffic factor above; transit time is a rough estimate (edit as needed).";
+  live0={zip:z,mi:d.routes[0].distance/1609.34,base:d.routes[0].duration/60};
+  sel.value="";ctl=null;
+  $("miles").value=live0.mi.toFixed(1);
+  applyTraffic();
   calc();
  })
  .catch(function(){
