@@ -47,9 +47,11 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div><label>Quick-select area</label><select id="preset"></select></div>
 <div><label>Home ZIP</label><input id="zip" inputmode="numeric" maxlength="5" placeholder="e.g. 90401"></div>
 <div><label>One-way miles</label><input id="miles" type="number" min="0" step="0.5"></div>
-<div><label>One-way drive (min)</label><input id="drive" type="number" min="0"></div>
+<div><label>Drive there, ~6 PM (min)</label><input id="drive" type="number" min="0"></div>
+<div><label>Drive home, ~11 PM (min)</label><input id="dret" type="number" min="0"></div>
 <div><label>One-way transit (min)</label><input id="trmin" type="number" min="0"></div>
-<div><label>Traffic factor for lookups (×)</label><input id="traffic" type="number" value="1.25" step="0.05" min="1"></div>
+<div><label>Arrival traffic, lookups (×)</label><input id="traffic" type="number" value="1.25" step="0.05" min="1"></div>
+<div><label>Return traffic, lookups (×)</label><input id="rtraffic" type="number" value="1.05" step="0.05" min="1"></div>
 </div>
 <p class="hint" id="zhint"></p>
 </div>
@@ -69,7 +71,7 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <div><label>Transit fare, round trip ($)</label><input id="tfare" type="number" value="3.5" step="0.25"></div>
 <div><label>Station parking ($, 0 if none)</label><input id="spark" type="number" value="3" step="0.5"></div>
 </div>
-<p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
+<p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min, priced separately for each direction using that direction’s drive time; the post-event surge applies to the ride home. A fare entered by hand is used for both directions. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
 </div>
 
 <div id="out"></div>
@@ -77,8 +79,8 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 
 <script>
 (function(){
-// [name, zip, miles, drive min, transit min]
-var P=[["Santa Monica","90401",16,40,65],["Pasadena","91101",11,28,55],["Long Beach","90802",22,35,70],["Sherman Oaks","91403",17,35,85],["Downtown LA","90017",1,8,15],["Hollywood","90028",8,25,40]];
+// [name, zip, miles, drive there min (~6 PM), transit min, drive home min (~11 PM, ~70% of arrival)]
+var P=[["Santa Monica","90401",16,40,65,27],["Pasadena","91101",11,28,55,19],["Long Beach","90802",22,35,70,25],["Sherman Oaks","91403",17,35,85,24],["Downtown LA","90017",1,8,15,6],["Hollywood","90028",8,25,40,17]];
 var $=function(i){return document.getElementById(i)};
 var sel=$("preset");
 sel.innerHTML='<option value="">Custom (enter below)</option>'+P.map(function(p,i){return '<option value="'+i+'">'+p[0]+' '+p[1]+'</option>'}).join("");
@@ -87,24 +89,24 @@ function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v}
 function money(x){return "$"+x.toFixed(2)}
 function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m":m+"m"}
 
-function fill(p){$("miles").value=p[2];$("drive").value=p[3];$("trmin").value=p[4];$("zip").value=p[1]}
+function fill(p){$("miles").value=p[2];$("drive").value=p[3];$("trmin").value=p[4];$("dret").value=p[5];$("zip").value=p[1]}
 // Live ZIP lookups: tmr = pending debounce, ctl = in-flight request, seq = id of the latest lookup.
 // Any newer input bumps seq so a slower, older response can never overwrite it.
 // live = {zip, mi, base} from the last successful lookup (base = free-flow minutes before traffic),
-// kept so the traffic factor can rescale times later; dropped once times come from anywhere else.
+// kept so the traffic factors can rescale times later; dropped once times come from anywhere else.
 var tmr,ctl,seq=0,live0=null;
 function cancelLookup(){clearTimeout(tmr);seq++;live0=null;if(ctl){ctl.abort();ctl=null}}
 function applyTraffic(){
  var mn=live0.base*(num("traffic")||1);
- $("drive").value=Math.round(mn);$("trmin").value=Math.round(mn*1.6+20);
- $("zhint").textContent="Live route from ZIP "+live0.zip+": "+live0.mi.toFixed(1)+" road miles. Drive time includes the traffic factor above; transit time is a rough estimate (edit as needed).";
+ $("drive").value=Math.round(mn);$("dret").value=Math.round(live0.base*(num("rtraffic")||1));$("trmin").value=Math.round(mn*1.6+20);
+ $("zhint").textContent="Live route from ZIP "+live0.zip+": "+live0.mi.toFixed(1)+" road miles, "+Math.round(live0.base)+" min with no traffic. Drive times use the arrival and return traffic factors; transit time is a rough estimate (edit as needed).";
 }
 function usePreset(i){sel.value=i;fill(P[i]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[i][0]+".";calc()}
 sel.onchange=function(){cancelLookup();if(sel.value!=="")usePreset(+sel.value);else{$("zhint").textContent="";calc()}};
 $("pt").onchange=function(){var ev=$("pt").value==="ev";["gasA","gasB"].forEach(function(i){$(i).hidden=ev});["evA","evB"].forEach(function(i){$(i).hidden=!ev});calc()};
 document.querySelectorAll("input,select").forEach(function(e){if(e.id!=="zip"&&e.id!=="preset")e.oninput=calc;e.onchange=e.onchange||calc});
-$("traffic").oninput=function(){if(live0)applyTraffic();calc()};
-["drive","trmin"].forEach(function(i){$(i).oninput=function(){live0=null;calc()}});
+["traffic","rtraffic"].forEach(function(i){$(i).oninput=function(){if(live0)applyTraffic();calc()}});
+["drive","dret","trmin"].forEach(function(i){$(i).oninput=function(){live0=null;calc()}});
 
 $("zip").oninput=function(){
  var z=$("zip").value.trim();
@@ -142,15 +144,16 @@ function live(z){
 }
 
 function model(n){
- var mi=num("miles"),d=num("drive"),t=num("trmin"),rt=mi*2,fuel;
+ var mi=num("miles"),d=num("drive"),dr=num("dret"),dd=d+dr,t=num("trmin"),rt=mi*2,fuel;
  if($("pt").value==="ev")fuel=rt*num("kwh")*parseFloat($("chg").value);else fuel=num("mpg")>0?rt/num("mpg")*num("gas"):0;
  var car=fuel+num("park");
- var inb=$("fare").value!==""?num("fare"):3+1.85*mi+0.4*d;
- var ride=(inb+inb*num("surge"))*(1+num("tip")/100);
+ var manual=$("fare").value!=="";
+ var inb=manual?num("fare"):3+1.85*mi+0.4*d, ret=manual?num("fare"):3+1.85*mi+0.4*dr;
+ var ride=(inb+ret*num("surge"))*(1+num("tip")/100);
  var tr=num("tfare")*n+num("spark");
  return{car:car,ride:ride,tr:tr,fuel:fuel,
-  time:{car:d*2+46,ride:d*2+28,tr:t*2},
-  fr:{car:[d*2,30,16],ride:[d*2,28,0],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
+  time:{car:dd+46,ride:dd+28,tr:t*2},
+  fr:{car:[dd,30,16],ride:[dd,28,0],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
 }
 
 function calc(){
@@ -184,7 +187,7 @@ function calc(){
   h+='<div class="row"><b>'+names[x]+'</b> · '+dur(tot)+'<div class="bar" style="width:'+(tot/mx*100)+'%">'+
   '<span style="background:'+col[x]+';width:'+(f[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(f[1]/tot*100)+'%"></span><span style="background:var(--line);width:'+(f[2]/tot*100)+'%"></span></div></div>'});
  h+='<div class="leg"><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:var(--line);border:1px solid var(--mut)"></i>Walking</span><span><i style="background:var(--car)"></i>Moving (color = mode)</span></div>';
- h+='<p class="hint">Assumptions: car adds 15 min to park, 15 to exit, and an 8-min walk each way; rideshare adds 8 min wait before and 20 min after the event; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
+ h+='<p class="hint">Assumptions: car adds 15 min to park, 15 to exit, and an 8-min walk each way; rideshare adds 8 min wait before and 20 min after the event; driving is the trip there plus the (usually faster) late-evening trip home; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
  $("out").innerHTML=h;
 }
 sel.value="0";fill(P[0]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[0][0]+".";
