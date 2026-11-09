@@ -74,6 +74,19 @@ th{font-size:.8rem;color:var(--mut);font-weight:600}
 <p class="hint">Rideshare fare left blank = $3.00 + $1.85/mile + $0.40/min, priced separately for each direction using that direction’s drive time; the post-event surge applies to the ride home. A fare entered by hand is used for both directions. Car and rideshare costs are per vehicle (shared by up to 3 riders here); transit fares are per rider.</p>
 </div>
 
+<div class="card">
+<h2>Time at the arena (min)</h2>
+<div class="grid">
+<div><label>Car: find &amp; enter parking</label><input id="tpark" type="number" value="15" min="0"></div>
+<div><label>Car: walk lot ↔ arena, each way</label><input id="twalk" type="number" value="8" min="0"></div>
+<div><label>Car: exit lot after event</label><input id="texit" type="number" value="15" min="0"></div>
+<div><label>Rideshare: wait for ride there</label><input id="rwait1" type="number" value="8" min="0"></div>
+<div><label>Rideshare: wait for pickup after</label><input id="rwait2" type="number" value="20" min="0"></div>
+<div><label>Rideshare: walk zone ↔ arena, each way</label><input id="rwalk" type="number" value="5" min="0"></div>
+</div>
+<p class="hint">Rideshare drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south), not the front door. Check your ticket on the night, as zones can change by event.</p>
+</div>
+
 <div id="out"></div>
 </main>
 
@@ -151,9 +164,10 @@ function model(n){
  var inb=manual?num("fare"):3+1.85*mi+0.4*d, ret=manual?num("fare"):3+1.85*mi+0.4*dr;
  var ride=(inb+ret*num("surge"))*(1+num("tip")/100);
  var tr=num("tfare")*n+num("spark");
+ var cw=num("tpark")+num("texit"),cwk=num("twalk")*2,rw=num("rwait1")+num("rwait2"),rwk=num("rwalk")*2;
  return{car:car,ride:ride,tr:tr,fuel:fuel,
-  time:{car:dd+46,ride:dd+28,tr:t*2},
-  fr:{car:[dd,30,16],ride:[dd,28,0],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
+  time:{car:dd+cw+cwk,ride:dd+rw+rwk,tr:t*2},
+  fr:{car:[dd,cw,cwk],ride:[dd,rw,rwk],tr:[t*2*0.7,t*2*0.15,t*2*0.15]}};
 }
 
 function calc(){
@@ -187,7 +201,7 @@ function calc(){
   h+='<div class="row"><b>'+names[x]+'</b> · '+dur(tot)+'<div class="bar" style="width:'+(tot/mx*100)+'%">'+
   '<span style="background:'+col[x]+';width:'+(f[0]/tot*100)+'%"></span><span style="background:var(--mut);width:'+(f[1]/tot*100)+'%"></span><span style="background:var(--line);width:'+(f[2]/tot*100)+'%"></span></div></div>'});
  h+='<div class="leg"><span><i style="background:var(--mut)"></i>Waiting / queues</span><span><i style="background:var(--line);border:1px solid var(--mut)"></i>Walking</span><span><i style="background:var(--car)"></i>Moving (color = mode)</span></div>';
- h+='<p class="hint">Assumptions: car adds 15 min to park, 15 to exit, and an 8-min walk each way; rideshare adds 8 min wait before and 20 min after the event; driving is the trip there plus the (usually faster) late-evening trip home; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
+ h+='<p class="hint">Assumptions (edit under “Time at the arena”): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; driving is the trip there plus the (usually faster) late-evening trip home; transit time is split roughly 70% riding, 15% waiting, 15% walking.</p></div>';
  $("out").innerHTML=h;
 }
 sel.value="0";fill(P[0]);$("zhint").textContent="Using estimated Saturday-evening distance and times for "+P[0][0]+".";
