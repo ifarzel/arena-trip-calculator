@@ -24,6 +24,9 @@ input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-rad
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 #zhint{white-space:pre-line}
 .evt{margin-bottom:6px}
+.base{margin:0}
+.bcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.bbig{font-size:1.35rem;font-weight:800;line-height:1.2}
 .asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
 .asec .hint{margin-bottom:0}
@@ -106,9 +109,11 @@ td.best .tot,td.best .per{color:var(--good)}
 <p class="hint" id="zhint"></p>
 </div>
 
+<div id="base"></div>
+
 <div class="card">
-<h2>Assumptions</h2>
-<p class="hint" style="margin:-6px 0 0">Defaults are typical for an arena event; change any of them to match how you travel.</p>
+<h2>Holistic inputs</h2>
+<p class="hint" style="margin:-6px 0 0">What Google Maps leaves out: costs, parking, waiting, walking at the arena and buffers. Defaults are typical for an arena event; change any of them to match how you travel.</p>
 
 <section class="asec" style="--m:var(--car)">
 <h3>🚗 Personal car</h3>
@@ -360,8 +365,8 @@ function live(q){
    var fa=t.fareThere,fb=t.fareBack,guess=fa==null||fb==null;
    if(fa==null)fa=fb;if(fb==null)fb=fa;
    $("tfare").value=(fa+fb).toFixed(2);
-   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Assumptions → Public transit.");
-  }else if(t)L.push("Google had no fare for this trip, so the transit fare under Assumptions → Public transit is an estimate.");
+   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Holistic inputs → Public transit.");
+  }else if(t)L.push("Google had no fare for this trip, so the transit fare under Holistic inputs → Public transit is an estimate.");
   L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
   $("zhint").textContent=L.join("\n");
   calc();
@@ -403,8 +408,21 @@ function waitNotes(){
  $("tearlyN").innerHTML=twaits?"<b>"+Math.round(twaits.early)+" min</b> for this trip. "+e:e+" Look up an address to calculate it.";
  $("tfirstN").innerHTML=twaits?"<b>"+(twaits.firstWait<60?Math.round(twaits.firstWait)+" min":dur(twaits.firstWait))+"</b> for this trip. "+f:f+" Look up an address to calculate it.";
 }
+// Google-only round trip: just the travel times from the lookup (or the user's entries),
+// before any of the holistic inputs (parking, waits, walks, buffers).
+function baseline(){
+ var d=num("drive")+num("dret"),t=num("trmin")+num("trret");
+ if(!d&&!t){$("base").innerHTML="";return}
+ var c=[["car","🚗 Personal car",d,num("drive")+" min there + "+num("dret")+" min home"],
+  ["ride","🚕 Rideshare",d,"same drive as the car"],
+  ["tr","🚆 Public transit",t,num("trmin")+" min there + "+num("trret")+" min home, incl. walking to stops and transfers"]],
+  best=c.reduce(function(a,b){return b[2]<a[2]?b:a});
+ $("base").innerHTML='<div class="card"><p class="eyebrow">'+(lastQ&&trip?"Google Maps estimate":"From your entries")+'</p><h2 style="margin-bottom:4px">Round-trip travel time</h2>'+
+  '<p class="hint" style="margin:0 0 12px">Just the time on the road or on board, as Google Maps gives it: no parking, pickup waits, walking at the arena or buffers. The full picture is in the results below.</p>'+
+  '<div class="modes base">'+c.map(function(x){return '<div class="bcard"><div class="mtop"><span style="color:var(--'+x[0]+')">'+x[1]+'</span>'+(Math.round(x[2])===Math.round(best[2])?'<span class="pill good">Fastest</span>':'')+'</div><div class="bbig">'+dur(x[2])+'</div><div class="comp">'+x[3]+'</div></div>'}).join("")+'</div></div>';
+}
 function calc(){
- waitNotes();
+ waitNotes();baseline();
  if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")&&!num("trret")){
   $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
@@ -473,7 +491,7 @@ function calc(){
   (order[0]!=="car"?'Driving loses '+mins(f.car[1]+f.car[2])+' to parking, exiting and walking.':'Parking and walking still cost '+mins(f.car[1]+f.car[2])+' of that trip.'));
  var late=trip&&trip.late?'<li class="warn"><b>⚠️ Late-night transit gap:</b> after the event the next transit trip home leaves at <b>'+trip.late.first+'</b>, arriving around '+trip.late.home+'. Plan on a ride home if you take transit there.</li>':'';
  h+='<div class="card"><h2>💡 Trade-offs &amp; break-even</h2><ul class="ins">'+late+I.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>';
- h+='<p class="hint">Assumptions (edit them above): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(twaits?', '+($("tearly").checked?'counts':'leaves out')+' '+Math.round(twaits.early)+' min of arriving early and '+($("tfirst").checked?'counts':'leaves out')+' '+(twaits.firstWait<60?Math.round(twaits.firstWait)+' min':dur(twaits.firstWait))+' waiting for the first ride home':'')+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
+ h+='<p class="hint">Holistic inputs (edit them above): car adds '+num("tpark")+' min to park, '+num("texit")+' to exit, and a '+num("twalk")+'-min walk each way; rideshare adds '+num("rwait1")+' min wait before and '+num("rwait2")+' min after the event, plus a '+num("rwalk")+'-min walk each way to the pickup zone; transit adds a '+num("tbuf")+'-min buffer at the first stop and a '+num("tcrowd")+'-min post-event crowd delay'+(twaits?', '+($("tearly").checked?'counts':'leaves out')+' '+Math.round(twaits.early)+' min of arriving early and '+($("tfirst").checked?'counts':'leaves out')+' '+(twaits.firstWait<60?Math.round(twaits.firstWait)+' min':dur(twaits.firstWait))+' waiting for the first ride home':'')+(tsplit?', and its riding and walking come from Google’s schedule, with waiting (transfers, arriving early, the first ride home) as the rest.':'; the rest is split roughly 70% riding, 15% waiting, 15% walking.')+'</p></div>';
  $("out").innerHTML=h;
  $("edit").onclick=function(){window.scrollTo({top:0,behavior:"smooth"});$("addr").focus({preventScroll:true})};
 }
