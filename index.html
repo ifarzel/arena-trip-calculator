@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Arena Trip Calculator: Crypto.com Arena</title>
+<title>Arena Trip Calculator</title>
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--ink:#14161f;--mut:#5d6477;--line:#e3e6ef;--acc:#5b4bdb;--car:#d9702a;--ride:#1f8f82;--tr:#3a6fe8;--good:#1b8a4b;--warn:#b7791f}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1117;--card:#1a1d27;--ink:#eef0f6;--mut:#a0a7ba;--line:#2b3040;--acc:#8c7fff;--good:#4cd48a;--car:#f0a05a;--ride:#45c7b8;--tr:#7aa2ff;--warn:#f2b84b}}
@@ -88,10 +88,11 @@ td.best .tot,td.best .per{color:var(--good)}
 <body>
 <main>
 <h1>🏟️ Arena Trip Calculator</h1>
-<p class="sub">Compare cost and time to get to and from Crypto.com Arena (1111 S Figueroa St) for your event. Every number below is editable.</p>
+<p class="sub">Compare cost and time to get to and from <span id="vname">Crypto.com Arena (1111 S Figueroa St)</span> for your event. Every number below is editable.</p>
 
 <div class="card">
 <h2>Your trip</h2>
+<div class="addr"><label for="venue">Venue</label><select id="venue"><option value="crypto">Crypto.com Arena · Downtown LA</option><option value="sofi">SoFi Stadium · Inglewood</option></select></div>
 <div class="addr"><label for="addr">Home address (or city / ZIP)</label>
 <div class="addrrow"><input id="addr" autocomplete="street-address" placeholder="e.g. 3333 Bristol St, Costa Mesa" autofocus><button id="go" type="button">Look up</button></div></div>
 <div class="grid evt">
@@ -128,7 +129,7 @@ td.best .tot,td.best .per{color:var(--good)}
 <div><label for="twalk">Walk lot ↔ arena, each way (min)</label><input id="twalk" type="number" value="8" min="0"></div>
 <div><label for="texit">Exit lot after event (min)</label><input id="texit" type="number" value="15" min="0"></div>
 </div>
-<p class="hint">Costs are per car and split between riders.</p>
+<p class="hint">Costs are per car and split between riders. <span id="ptip"></span></p>
 </section>
 
 <section class="asec" style="--m:var(--ride)">
@@ -141,7 +142,7 @@ td.best .tot,td.best .per{color:var(--good)}
 <div><label for="rwait2">Wait for pickup after (min)</label><input id="rwait2" type="number" value="20" min="0"></div>
 <div><label for="rwalk">Walk zone ↔ arena, each way (min)</label><input id="rwalk" type="number" value="5" min="0"></div>
 </div>
-<p class="hint">Fare left on “auto” = $3.00 + $1.85/mile + $0.40/min, priced for each direction from its drive time; a fare you enter is used both ways. The surge applies to the ride home. Costs are per ride and split between riders. Drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south); check your ticket, as zones can change by event.</p>
+<p class="hint">Fare left on “auto” = $3.00 + $1.85/mile + $0.40/min, priced for each direction from its drive time; a fare you enter is used both ways. The surge applies to the ride home. Costs are per ride and split between riders. <span id="rzone"></span></p>
 </section>
 
 <section class="asec" style="--m:var(--tr)">
@@ -156,7 +157,7 @@ td.best .tot,td.best .per{color:var(--good)}
 <label class="tog"><input type="checkbox" id="tearly" checked><span><b>Count arriving early as waiting</b><small id="tearlyN">Time at the arena between the transit trip arriving and your seat time.</small></span></label>
 <label class="tog"><input type="checkbox" id="tfirst" checked><span><b>Count the wait for the first ride home</b><small id="tfirstN">Time after the event ends until the first bus or train you can catch.</small></span></label>
 </div>
-<p class="hint">The fare is filled in from Google when it has one. Add station parking if you drive to a park-and-ride; it’s shared by the group.</p>
+<p class="hint">The fare is filled in from Google when it has one. Add station parking if you drive to a park-and-ride; it’s shared by the group. <span id="ttip"></span></p>
 </section>
 </div>
 
@@ -179,7 +180,20 @@ function dur(m){m=Math.round(m);var h=Math.floor(m/60);return h?h+"h "+(m%60)+"m
 // the end. The key is restricted in Google
 // Cloud to this site's URLs and these two APIs; referrerPolicy sends the full page URL it checks.
 var GKEY="AIzaSyC6YF3owaP0CiuOfgjDsGA5igkAUOb2HFU";
-var ARENA=[-118.2673,34.0430],SOCAL=[-121.0,32.5,-114.0,35.8];
+// Venues: location, display text, holistic-input defaults (estimates; prices vary by event) and tips.
+var VENUES={
+ crypto:{name:"Crypto.com Arena",where:"Crypto.com Arena (1111 S Figueroa St, Downtown LA)",ll:[-118.2673,34.0430],
+  d:{park:40,tpark:15,twalk:8,texit:15,surge:1.35,rwait1:8,rwait2:20,rwalk:5,tbuf:5,tcrowd:10},
+  park:"Event parking around L.A. Live is typically about $40; prices vary by event.",
+  zone:"Drop-off and pickup use the white-curb zones on Chick Hearn Ct (north) and Figueroa St between 12th St and Pico (south); check your ticket, as zones can change by event.",
+  transit:"Metro’s A and E Lines (Pico station) and 7th St/Metro Center are a short walk away."},
+ sofi:{name:"SoFi Stadium",where:"SoFi Stadium (1001 Stadium Dr, Inglewood)",ll:[-118.3392,33.9535],
+  d:{park:60,tpark:20,twalk:12,texit:30,surge:1.5,rwait1:10,rwait2:30,rwalk:10,tbuf:5,tcrowd:15},
+  park:"SoFi asks you to buy parking online in advance, as prices rise on event day; $60 is an estimate for on-site lots. Off-site lots with shuttles are often about $25–55.",
+  zone:"Rideshare uses a dedicated zone north of the stadium (Kareem Ct via Pincay Dr in past seasons), a longer walk than the entrances; check SoFi’s rideshare map for your event.",
+  transit:"There’s no rail station at the stadium: for events Metro runs a free shuttle from the LAX/Metro Transit Center (C and K Lines). Google’s routes may not include event shuttles, so check metro.net/sofi."}};
+var venueKey="crypto",V=VENUES.crypto;
+var ARENA=V.ll,SOCAL=[-121.0,32.5,-114.0,35.8];
 // Fallbacks if Google fails: OSRM no-traffic time times rough multipliers; transit from drive time.
 var ARRIVE=1.25,RETURN=1.05;
 var RP="no-referrer-when-downgrade";
@@ -327,6 +341,16 @@ function evChanged(){
 }
 ["edate","estart","eend"].forEach(function(i){$(i).oninput=evChanged;$(i).onchange=evChanged});
 $("edate").value=ymdLocal(nextSat());$("edate").min=ymdLocal(new Date());
+// Switching venue moves the destination, applies that venue's defaults and tips, and redoes the lookup.
+function setVenue(k,keepInputs){
+ venueKey=VENUES[k]?k:"crypto";V=VENUES[venueKey];ARENA=V.ll;$("venue").value=venueKey;
+ $("vname").textContent=V.where;document.title="Arena Trip Calculator: "+V.name;
+ if(!keepInputs)Object.keys(V.d).forEach(function(id){$(id).value=V.d[id]});
+ $("ptip").textContent=V.park;$("rzone").textContent=V.zone;$("ttip").textContent=V.transit;
+ try{var u=new URL(location.href);if(venueKey==="crypto")u.searchParams.delete("venue");else u.searchParams.set("venue",venueKey);history.replaceState(null,"",u)}catch(e){}
+}
+$("venue").onchange=function(){setVenue(this.value);trip=null;twaits=null;tsplit=null;calc();if(lastQ.length>=3){$("zhint").textContent="Updating routes for "+V.name+"…";lookup(true)}};
+setVenue(new URLSearchParams(location.search).get("venue")||"crypto");
 $("ehint").textContent="Planning to be seated by "+laClock(evt().seat)+" (15 min before the start).";
 function live(q){
  var E=evt();
@@ -436,7 +460,7 @@ function calc(){
   ev=$("pt").value==="ev",surge=num("surge"),tf=num("tfare"),sp=num("spark"),h="";
 
  // header
- h+='<div class="card rhead"><div><p class="eyebrow">✓ Event cost &amp; time breakdown</p><h2>Your Crypto.com Arena trip</h2><p class="meta">'+
+ h+='<div class="card rhead"><div><p class="eyebrow">✓ Event cost &amp; time breakdown</p><h2>Your '+V.name+' trip</h2><p class="meta">'+
   (trip?"From "+esc(trip.place):"Custom trip")+" · "+esc(evtText(evt()))+'</p></div>'+
   '<button class="ghost" type="button" id="edit">✎ Edit trip</button></div>';
 
