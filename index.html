@@ -23,6 +23,7 @@ input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-rad
 .addr{margin-bottom:12px}.addrrow{display:flex;gap:8px}
 button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 #zhint{white-space:pre-line}
+#out[hidden]{display:none}
 .evt{margin-bottom:6px}
 .base{margin:0}
 .bcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
@@ -31,8 +32,9 @@ button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#
 .hol>summary::-webkit-details-marker{display:none}
 .hol>summary h2{margin:0}
 .holt small{display:block;color:var(--mut);font-size:.8rem;margin-top:2px}
-.holbtn{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-weight:600;font-size:.88rem;white-space:nowrap}
-.hol>summary:hover .holbtn,.hol>summary:focus-visible .holbtn{border-color:var(--acc)}
+.holbtn{border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;padding:7px 14px;font-weight:600;font-size:.88rem;white-space:nowrap}
+.hol[open] .holbtn{background:transparent;color:var(--ink);border-color:var(--line)}
+.hol>summary:hover .holbtn,.hol>summary:focus-visible .holbtn{border-color:var(--acc);box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 30%,transparent)}
 .hol .hide,.hol[open] .show{display:none}.hol[open] .hide{display:inline}
 .asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
@@ -120,7 +122,7 @@ td.best .tot,td.best .per{color:var(--good)}
 <div id="base"></div>
 
 <details class="card hol" id="hol">
-<summary><span class="holt"><h2>Holistic inputs</h2><small id="holsum"></small></span><span class="holbtn"><span class="show">⚙️ Adjust</span><span class="hide">Hide</span></span></summary>
+<summary><span class="holt"><h2>Holistic inputs</h2><small id="holsum"></small></span><span class="holbtn"><span class="show">➕ Add holistic inputs</span><span class="hide">Hide holistic view</span></span></summary>
 <p class="hint" style="margin:8px 0 0">What Google Maps leaves out: costs, parking, waiting, walking at the venue and buffers. Defaults are typical for the venue; change any of them to match how you travel.</p>
 
 <section class="asec" style="--m:var(--car)">
@@ -358,9 +360,12 @@ function setVenue(k,keepInputs){
 }
 $("venue").onchange=function(){setVenue(this.value);trip=null;twaits=null;tsplit=null;calc();if(lastQ.length>=3){$("zhint").textContent="Updating routes for "+V.name+"…";lookup(true)}};
 setVenue(new URLSearchParams(location.search).get("venue")||"crypto");
-// Holistic inputs start collapsed; remember if this viewer opened them.
+// The holistic inputs and the holistic results stay hidden until "Add holistic inputs" is clicked;
+// remember the choice per viewer.
+function holView(){$("out").hidden=!$("hol").open;holSummary()}
 try{if(localStorage.getItem("holOpen")==="1")$("hol").open=true}catch(e){}
-$("hol").addEventListener("toggle",function(){try{localStorage.setItem("holOpen",this.open?"1":"0")}catch(e){}});
+holView();
+$("hol").addEventListener("toggle",function(){holView();try{localStorage.setItem("holOpen",this.open?"1":"0")}catch(e){}});
 $("ehint").textContent="Planning to be seated by "+laClock(evt().seat)+" (15 min before the start).";
 function live(q){
  var E=evt();
@@ -399,7 +404,7 @@ function live(q){
    var fa=t.fareThere,fb=t.fareBack,guess=fa==null||fb==null;
    if(fa==null)fa=fb;if(fb==null)fb=fa;
    $("tfare").value=(fa+fb).toFixed(2);
-   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Holistic inputs → Public transit (⚙️ Adjust).");
+   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Holistic inputs → Public transit.");
   }else if(t)L.push("Google had no fare for this trip, so the transit fare under Holistic inputs → Public transit is an estimate.");
   L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
   $("zhint").textContent=L.join("\n");
@@ -452,11 +457,11 @@ function baseline(){
   ["tr","🚆 Public transit",t,num("trmin")+" min there + "+num("trret")+" min home, incl. walking to stops and transfers"]],
   best=c.reduce(function(a,b){return b[2]<a[2]?b:a});
  $("base").innerHTML='<div class="card"><p class="eyebrow">'+(lastQ&&trip?"Google Maps estimate":"From your entries")+'</p><h2 style="margin-bottom:4px">Round-trip travel time</h2>'+
-  '<p class="hint" style="margin:0 0 12px">Just the time on the road or on board, as Google Maps gives it: no parking, pickup waits, walking at the arena or buffers. The full picture is in the results below.</p>'+
+  '<p class="hint" style="margin:0 0 12px">Just the time on the road or on board, as Google Maps gives it: no parking, pickup waits, walking at the arena or buffers. Add holistic inputs below to see the full door-to-seat time and cost.</p>'+
   '<div class="modes base">'+c.map(function(x){return '<div class="bcard"><div class="mtop"><span style="color:var(--'+x[0]+')">'+x[1]+'</span>'+(Math.round(x[2])===Math.round(best[2])?'<span class="pill good">Fastest</span>':'')+'</div><div class="bbig">'+dur(x[2])+'</div><div class="comp">'+x[3]+'</div></div>'}).join("")+'</div></div>';
 }
 function holSummary(){
- $("holsum").textContent="Using: $"+num("park")+" parking · "+(num("tpark")+num("texit"))+" min parking & exit · ×"+num("surge")+" rideshare surge · "+(num("tbuf")+num("tcrowd"))+" min transit buffers";
+ $("holsum").textContent=($("hol").open?"Included in the results below. Using: $":"Adds costs, parking, waits, walking and buffers to the comparison. Defaults: $")+num("park")+" parking · "+(num("tpark")+num("texit"))+" min parking & exit · ×"+num("surge")+" rideshare surge · "+(num("tbuf")+num("tcrowd"))+" min transit buffers";
 }
 function calc(){
  waitNotes();baseline();holSummary();
