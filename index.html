@@ -27,6 +27,13 @@ button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#
 .base{margin:0}
 .bcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .bbig{font-size:1.35rem;font-weight:800;line-height:1.2}
+.hol>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}
+.hol>summary::-webkit-details-marker{display:none}
+.hol>summary h2{margin:0}
+.holt small{display:block;color:var(--mut);font-size:.8rem;margin-top:2px}
+.holbtn{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-weight:600;font-size:.88rem;white-space:nowrap}
+.hol>summary:hover .holbtn,.hol>summary:focus-visible .holbtn{border-color:var(--acc)}
+.hol .hide,.hol[open] .show{display:none}.hol[open] .hide{display:inline}
 .asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
 .asec .hint{margin-bottom:0}
@@ -112,9 +119,9 @@ td.best .tot,td.best .per{color:var(--good)}
 
 <div id="base"></div>
 
-<div class="card">
-<h2>Holistic inputs</h2>
-<p class="hint" style="margin:-6px 0 0">What Google Maps leaves out: costs, parking, waiting, walking at the arena and buffers. Defaults are typical for an arena event; change any of them to match how you travel.</p>
+<details class="card hol" id="hol">
+<summary><span class="holt"><h2>Holistic inputs</h2><small id="holsum"></small></span><span class="holbtn"><span class="show">⚙️ Adjust</span><span class="hide">Hide</span></span></summary>
+<p class="hint" style="margin:8px 0 0">What Google Maps leaves out: costs, parking, waiting, walking at the venue and buffers. Defaults are typical for the venue; change any of them to match how you travel.</p>
 
 <section class="asec" style="--m:var(--car)">
 <h3>🚗 Personal car</h3>
@@ -159,7 +166,7 @@ td.best .tot,td.best .per{color:var(--good)}
 </div>
 <p class="hint">The fare is filled in from Google when it has one. Add station parking if you drive to a park-and-ride; it’s shared by the group. <span id="ttip"></span></p>
 </section>
-</div>
+</details>
 
 <div id="out"></div>
 </main>
@@ -351,6 +358,9 @@ function setVenue(k,keepInputs){
 }
 $("venue").onchange=function(){setVenue(this.value);trip=null;twaits=null;tsplit=null;calc();if(lastQ.length>=3){$("zhint").textContent="Updating routes for "+V.name+"…";lookup(true)}};
 setVenue(new URLSearchParams(location.search).get("venue")||"crypto");
+// Holistic inputs start collapsed; remember if this viewer opened them.
+try{if(localStorage.getItem("holOpen")==="1")$("hol").open=true}catch(e){}
+$("hol").addEventListener("toggle",function(){try{localStorage.setItem("holOpen",this.open?"1":"0")}catch(e){}});
 $("ehint").textContent="Planning to be seated by "+laClock(evt().seat)+" (15 min before the start).";
 function live(q){
  var E=evt();
@@ -389,7 +399,7 @@ function live(q){
    var fa=t.fareThere,fb=t.fareBack,guess=fa==null||fb==null;
    if(fa==null)fa=fb;if(fb==null)fb=fa;
    $("tfare").value=(fa+fb).toFixed(2);
-   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Holistic inputs → Public transit.");
+   L.push("Transit fare from Google: $"+fa.toFixed(2)+" there + $"+fb.toFixed(2)+" home = $"+(fa+fb).toFixed(2)+" per person"+(guess?" (Google had no fare for one direction, so it’s assumed to match the other)":"")+". Change it under Holistic inputs → Public transit (⚙️ Adjust).");
   }else if(t)L.push("Google had no fare for this trip, so the transit fare under Holistic inputs → Public transit is an estimate.");
   L.push("Edit any time above as needed."+(x.google||t?" Routes by Google.":""));
   $("zhint").textContent=L.join("\n");
@@ -445,8 +455,11 @@ function baseline(){
   '<p class="hint" style="margin:0 0 12px">Just the time on the road or on board, as Google Maps gives it: no parking, pickup waits, walking at the arena or buffers. The full picture is in the results below.</p>'+
   '<div class="modes base">'+c.map(function(x){return '<div class="bcard"><div class="mtop"><span style="color:var(--'+x[0]+')">'+x[1]+'</span>'+(Math.round(x[2])===Math.round(best[2])?'<span class="pill good">Fastest</span>':'')+'</div><div class="bbig">'+dur(x[2])+'</div><div class="comp">'+x[3]+'</div></div>'}).join("")+'</div></div>';
 }
+function holSummary(){
+ $("holsum").textContent="Using: $"+num("park")+" parking · "+(num("tpark")+num("texit"))+" min parking & exit · ×"+num("surge")+" rideshare surge · "+(num("tbuf")+num("tcrowd"))+" min transit buffers";
+}
 function calc(){
- waitNotes();baseline();
+ waitNotes();baseline();holSummary();
  if(!num("miles")&&!num("drive")&&!num("dret")&&!num("trmin")&&!num("trret")){
   $("out").innerHTML='<div class="card"><h2>Results</h2><p class="hint" style="margin:0">Enter your home address above to look up the route, or fill in miles and minutes yourself.</p></div>';
   return;
