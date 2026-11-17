@@ -36,6 +36,11 @@ button{padding:8px 16px;border:0;border-radius:8px;background:var(--acc);color:#
 .hol[open] .holbtn{background:transparent;color:var(--ink);border-color:var(--line)}
 .hol>summary:hover .holbtn,.hol>summary:focus-visible .holbtn{border-color:var(--acc);box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 30%,transparent)}
 .hol .hide,.hol[open] .show{display:none}.hol[open] .hide{display:inline}
+/* closed: just the button, no card, title or summary */
+.hol:not([open]){background:none;border:0;padding:0;margin:4px 0 20px}
+.hol:not([open])>summary{justify-content:center}
+.hol:not([open]) .holt{display:none}
+.hol:not([open]) .holbtn{padding:10px 22px;font-size:.95rem}
 .asec{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .asec h3{margin:0 0 10px;font-size:.95rem;color:var(--m)}
 .asec .hint{margin-bottom:0}
